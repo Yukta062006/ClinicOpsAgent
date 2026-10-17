@@ -383,9 +383,15 @@ export default function TravelPlanner() {
             zoomControl={true}
           >
             <ResetView center={currentLocation || hospitalLocation.coordinates} zoom={16} />
+            {/* Hybrid map: Satellite with road names overlay */}
             <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https:// Sentinel-2</a> contributors'
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://www.esri.com/">ESRI</a>'
               url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+              opacity={0.7}
+            />
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
             
             {/* Hospital Marker */}
