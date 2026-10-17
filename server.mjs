@@ -979,3 +979,6 @@ app.post('/api/learning/complete-lesson', authenticateToken, (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
+
+// Keep server running
+process.stdin.resume();
