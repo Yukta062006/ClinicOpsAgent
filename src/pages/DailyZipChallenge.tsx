@@ -68,6 +68,13 @@ export default function DailyZipChallenge() {
     }
   }, [todayDate])
 
+  // Switch to game tab when puzzle is loaded
+  useEffect(() => {
+    if (currentPuzzle && activeTab === 'dashboard') {
+      setActiveTab('game')
+    }
+  }, [currentPuzzle, activeTab])
+
   // Generate a solvable puzzle
   const generatePuzzle = (day: number): Puzzle => {
     let gridSize = 4
@@ -194,11 +201,30 @@ export default function DailyZipChallenge() {
   }
 
   const startGame = () => {
-    loadTodayPuzzle()
-    // Wait for puzzle to be set before changing tab
-    setTimeout(() => {
-      setActiveTab('game')
-    }, 100)
+    const storedPuzzle = localStorage.getItem('clinicops_zip_daily_puzzle')
+    const storedDate = localStorage.getItem('clinicops_zip_daily_date')
+    const day = currentStreak + 1
+    
+    let puzzle: Puzzle
+    
+    if (storedPuzzle && storedDate === todayDate) {
+      puzzle = JSON.parse(storedPuzzle)
+    } else {
+      puzzle = generatePuzzle(day)
+      localStorage.setItem('clinicops_zip_daily_puzzle', JSON.stringify(puzzle))
+      localStorage.setItem('clinicops_zip_daily_date', todayDate)
+    }
+    
+    setCurrentPuzzle(puzzle)
+    setCurrentStep(1)
+    setSelectedNodes([])
+    setPathPoints([])
+    setMoves(0)
+    setTimeElapsed(0)
+    setHintMode(false)
+    setGameStatus('playing')
+    
+    // Set puzzle first, then switch tab in useEffect
   }
 
   const getNodePosition = (x: number, y: number, gridSize: number) => {
@@ -435,6 +461,11 @@ export default function DailyZipChallenge() {
                 setGameStatus('playing')
                 setShowPauseModal(false)
                 setShowCompletion(false)
+                setPathPoints([])
+                setSelectedNodes([])
+                setCurrentStep(1)
+                setMoves(0)
+                setTimeElapsed(0)
               }}
               className="flex items-center space-x-2 text-forest-green hover:text-green-600"
             >
