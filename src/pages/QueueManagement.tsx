@@ -12,6 +12,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useData } from '../context/DataContext'
+import { apiQueue } from '../utils/api'
 
 interface QueueItem {
   id: string
@@ -29,6 +30,7 @@ export default function QueueManagement() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filter, setFilter] = useState<'all' | 'waiting' | 'in-progress' | 'completed'>('all')
   const [soundEnabled, setSoundEnabled] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
   const audioContextRef = useRef<AudioContext | null>(null)
   
   const { 
@@ -36,14 +38,32 @@ export default function QueueManagement() {
     updateQueueItem, 
     getNextInQueue,
     soundEnabled: contextSoundEnabled,
-    toggleSound
+    toggleSound,
+    user
   } = useData()
 
-  // Sync with context
+  // Load queue from backend
   useEffect(() => {
-    setQueue(contextQueue)
-    setSoundEnabled(contextSoundEnabled)
-  }, [contextQueue, contextSoundEnabled])
+    const loadQueue = async () => {
+      const token = localStorage.getItem('clinicops_token')
+      if (token) {
+        const response = await apiQueue.getAll(token, { status: 'waiting' })
+        if (response.success && response.data) {
+          setQueue(response.data.queue.map((q: any) => ({
+            id: q.id,
+            token: q.token,
+            patientName: q.patient_name,
+            arrivalTime: q.arrival_time,
+            status: q.status as 'waiting' | 'called' | 'in-progress' | 'completed',
+            priority: q.priority as 'normal' | 'urgent',
+            department: q.department,
+            reason: q.reason || ''
+          })))
+        }
+      }
+    }
+    loadQueue()
+  }, [])
 
   // Initialize audio context
   useEffect(() => {
@@ -99,32 +119,49 @@ export default function QueueManagement() {
     }
   }
 
-  const updateStatus = (id: string, newStatus: QueueItem['status']) => {
-    setQueue(prev => prev.map(item => 
-      item.id === id ? { ...item, status: newStatus } : item
-    ))
-    updateQueueItem(id, newStatus)
-  }
-
-  const callNextPatient = () => {
-    const nextPatient = getNextInQueue()
-    if (nextPatient) {
-      updateStatus(nextPatient.id, 'called')
-      playBeep()
-      playAnnouncementSound()
-      
-      setTimeout(() => {
-        updateStatus(nextPatient.id, 'in-progress')
-      }, 3000)
+  const updateStatus = async (id: string, newStatus: QueueItem['status']) => {
+    const token = localStorage.getItem('clinicops_token')
+    if (token) {
+      const response = await apiQueue.updateStatus(token, id, newStatus)
+      if (response.success && response.data) {
+        setQueue(prev => prev.map(item => 
+          item.id === id ? { ...item, status: newStatus } : item
+        ))
+      }
     }
   }
 
-  const handleStatusChange = (id: string, newStatus: QueueItem['status']) => {
+  const callNextPatient = async () => {
+    const token = localStorage.getItem('clinicops_token')
+    if (!token) return
+    
+    setIsLoading(true)
+    const response = await apiQueue.callNext(token, user?.id)
+    
+    if (response.success && response.data) {
+      playBeep()
+      playAnnouncementSound()
+      
+      setQueue(prev => {
+        const calledPatient = prev.find(q => q.id === response.data.patient.id)
+        if (calledPatient) {
+          return prev.map(item => 
+            item.id === calledPatient.id ? { ...item, status: 'called' } : item
+          )
+        }
+        return prev
+      })
+    }
+    
+    setIsLoading(false)
+  }
+
+  const handleStatusChange = async (id: string, newStatus: QueueItem['status']) => {
     if (newStatus === 'called') {
       playBeep()
       playAnnouncementSound()
     }
-    updateStatus(id, newStatus)
+    await updateStatus(id, newStatus)
   }
 
   const filteredQueue = queue.filter(item => {
@@ -170,10 +207,11 @@ export default function QueueManagement() {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={callNextPatient}
-            className="flex items-center space-x-2 bg-forest-green text-white px-6 py-3 rounded-lg font-medium hover:bg-green-600 transition-all shadow-card hover:shadow-card-hover"
+            disabled={isLoading}
+            className="flex items-center space-x-2 bg-forest-green text-white px-6 py-3 rounded-lg font-medium hover:bg-green-600 transition-all shadow-card hover:shadow-card-hover disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <UserPlusIcon className="w-5 h-5" />
-            <span>Call Next Patient</span>
+            <span>{isLoading ? 'Calling...' : 'Call Next Patient'}</span>
           </motion.button>
         </div>
       </div>
