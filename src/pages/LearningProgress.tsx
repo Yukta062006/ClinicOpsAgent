@@ -486,7 +486,7 @@ export default function LearningProgress() {
 
       {/* Lesson Modal */}
       <AnimatePresence>
-        {currentLesson && currentLessonData && (
+        {currentLesson && currentLessonData && !quizResult && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -601,7 +601,12 @@ export default function LearningProgress() {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={closeLesson}
+                onClick={() => {
+                  closeLesson()
+                  // Reset quiz state for a new lesson attempt
+                  setQuizResult(null)
+                  setQuizAnswer(null)
+                }}
                 className="px-6 py-3 bg-forest-green text-white rounded-lg font-medium hover:bg-green-600"
               >
                 Continue Learning
