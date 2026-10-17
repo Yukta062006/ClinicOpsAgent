@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { useLocation, Link } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { useLocation, Link, useNavigate } from 'react-router-dom'
 import { 
   HomeIcon, 
   UserIcon, 
@@ -21,23 +21,50 @@ interface LayoutProps {
   children: React.ReactNode
 }
 
-const menuItems = [
-  { name: 'Front Desk', path: '/front-desk', icon: UserIcon },
-  { name: 'Patient Dashboard', path: '/patient-dashboard', icon: UserIcon },
-  { name: 'Doctor Dashboard', path: '/doctor-dashboard', icon: BeakerIcon },
-  { name: 'Queue Management', path: '/queue-management', icon: ClockIcon },
-  { name: 'Waiting Room', path: '/waiting-room', icon: QueueListIcon },
-  { name: 'Travel Planner', path: '/travel-planner', icon: MapIcon },
-  { name: 'Medical Research', path: '/medical-research', icon: MagnifyingGlassIcon },
-  { name: 'Research Summary', path: '/research-summary', icon: BookOpenIcon },
-  { name: 'Medical Videos', path: '/medical-videos', icon: VideoCameraIcon },
-  { name: 'Health Games', path: '/health-games', icon: PuzzlePieceIcon },
-  { name: 'Learning Progress', path: '/learning-progress', icon: ChartBarIcon },
+interface MenuItem {
+  name: string
+  path: string
+  icon: any
+  roles?: string[]
+}
+
+const menuItems: MenuItem[] = [
+  { name: 'Front Desk', path: '/front-desk', icon: UserIcon, roles: ['frontdesk'] },
+  { name: 'Patient Dashboard', path: '/patient-dashboard', icon: UserIcon, roles: ['patient'] },
+  { name: 'Doctor Dashboard', path: '/doctor-dashboard', icon: BeakerIcon, roles: ['doctor'] },
+  { name: 'Queue Management', path: '/queue-management', icon: ClockIcon, roles: ['doctor', 'frontdesk'] },
+  { name: 'Waiting Room', path: '/waiting-room', icon: QueueListIcon, roles: ['doctor', 'frontdesk'] },
+  { name: 'Travel Planner', path: '/travel-planner', icon: MapIcon, roles: ['patient'] },
+  { name: 'Medical Research', path: '/medical-research', icon: MagnifyingGlassIcon, roles: ['patient'] },
+  { name: 'Research Summary', path: '/research-summary', icon: BookOpenIcon, roles: ['patient'] },
+  { name: 'Medical Videos', path: '/medical-videos', icon: VideoCameraIcon, roles: ['patient'] },
+  { name: 'Health Games', path: '/health-games', icon: PuzzlePieceIcon, roles: ['patient'] },
+  { name: 'Learning Progress', path: '/learning-progress', icon: ChartBarIcon, roles: ['patient'] },
 ]
 
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [user, setUser] = useState<any>(null)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const savedUser = localStorage.getItem('clinicops_user')
+    if (savedUser) {
+      setUser(JSON.parse(savedUser))
+    }
+  }, [])
+
+  const handleLogout = () => {
+    localStorage.removeItem('clinicops_token')
+    localStorage.removeItem('clinicops_user')
+    navigate('/login')
+  }
+
+  const getVisibleMenuItems = () => {
+    if (!user) return menuItems.filter(item => item.roles?.includes('patient') || item.path === '/login')
+    return menuItems.filter(item => !item.roles || item.roles.includes(user.role))
+  }
 
   return (
     <div className="min-h-screen bg-warm-cream">
@@ -73,7 +100,7 @@ export default function Layout({ children }: LayoutProps) {
           </div>
 
           <nav className="mt-6 px-4 space-y-1">
-            {menuItems.map((item) => {
+            {getVisibleMenuItems().map((item) => {
               const isActive = location.pathname === item.path
               return (
                 <Link
@@ -131,17 +158,26 @@ export default function Layout({ children }: LayoutProps) {
                 })}
               </p>
             </div>
-            <div className="flex items-center space-x-6">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-full bg-pale-sage flex items-center justify-center text-forest-green font-semibold border border-pale-sage">
-                  JD
+            {user && (
+              <div className="flex items-center space-x-6">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-full bg-pale-sage flex items-center justify-center text-forest-green font-semibold border border-pale-sage">
+                    {user.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-forest-green">{user.name}</p>
+                    <p className="text-xs text-text-secondary capitalize">{user.role}</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium text-forest-green">Dr. John Doe</p>
-                  <p className="text-xs text-text-secondary">Administrator</p>
-                </div>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center space-x-2 text-text-secondary hover:text-forest-green transition-colors"
+                >
+                  <ArrowRightOnRectangleIcon className="w-5 h-5" />
+                  <span className="text-sm font-medium">Logout</span>
+                </button>
               </div>
-            </div>
+            )}
           </header>
 
           {/* Page Content */}

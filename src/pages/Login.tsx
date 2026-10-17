@@ -1,22 +1,36 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { EnvelopeIcon, LockClosedIcon, UserIcon } from '@heroicons/react/24/outline'
+import { apiAuth } from '../utils/api'
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
   const navigate = useNavigate()
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    
-    // Simulate login
-    setTimeout(() => {
+    setError('')
+
+    try {
+      const response = await apiAuth.login(email, password)
+      
+      if (response.success && response.data) {
+        const { token, user } = response.data
+        localStorage.setItem('clinicops_token', token)
+        localStorage.setItem('clinicops_user', JSON.stringify(user))
+        navigate('/dashboard')
+      } else {
+        setError(response.error || 'Login failed. Please check your credentials.')
+      }
+    } catch (err) {
+      setError('Network error. Please try again.')
+    } finally {
       setIsLoading(false)
-      navigate('/dashboard')
-    }, 1000)
+    }
   }
 
   return (
@@ -29,6 +43,12 @@ export default function Login() {
           <h1 className="text-2xl font-serif font-bold text-forest-green mb-2">Welcome Back</h1>
           <p className="text-sm text-text-secondary">Sign in to your ClinicOps account</p>
         </div>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-600">{error}</p>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>

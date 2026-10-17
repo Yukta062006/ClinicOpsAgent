@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { 
   CalendarIcon, 
@@ -7,33 +7,75 @@ import {
   CheckCircleIcon,
   ArrowRightIcon
 } from '@heroicons/react/24/outline'
+import { apiDashboard, apiQueue } from '../utils/api'
+
+interface StatsData {
+  total_patients?: number
+  appointments_today?: number
+  active_queue?: number
+  completed_consultations?: number
+}
 
 export default function Dashboard() {
-  const stats = [
-    { label: 'Total Patients', value: '1,234', icon: UserPlusIcon },
-    { label: 'Appointments Today', value: '45', icon: CalendarIcon },
-    { label: 'Active Queue', value: '12', icon: ClockIcon },
-    { label: 'Completed Consultations', value: '8', icon: CheckCircleIcon },
-  ]
+  const [stats, setStats] = useState<StatsData>({})
+  const [user, setUser] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [queueItems, setQueueItems] = useState<any[]>([])
 
-  const recentActivity = [
-    { title: 'New Patient Registration', time: '2 hours ago', doctor: 'Dr. Sarah Smith' },
-    { title: 'Appointment Scheduled', time: '4 hours ago', doctor: 'Dr. John Doe' },
-    { title: 'Lab Results Available', time: '5 hours ago', doctor: 'Dr. Emily Chen' },
-    { title: 'Prescription Updated', time: '6 hours ago', doctor: 'Dr. Michael Brown' },
-  ]
+  useEffect(() => {
+    const savedUser = localStorage.getItem('clinicops_user')
+    if (savedUser) setUser(JSON.parse(savedUser))
+    
+    const token = localStorage.getItem('clinicops_token')
+    if (token) {
+      loadStats(token)
+      loadQueue(token)
+    }
+    setIsLoading(false)
+  }, [])
+
+  const loadStats = async (token: string) => {
+    const response = await apiDashboard.getStats(token)
+    if (response.success && response.data) {
+      setStats(response.data.stats)
+    }
+  }
+
+  const loadQueue = async (token: string) => {
+    const response = await apiQueue.getAll(token, { status: 'waiting' })
+    if (response.success && response.data) {
+      setQueueItems(response.data.queue || [])
+    }
+  }
+
+  const formatValue = (value: number | undefined) => value?.toLocaleString() || '0'
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-forest-green font-medium">Loading...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-7xl mx-auto">
       {/* Welcome Section */}
       <div className="mb-8">
-        <h1 className="text-3xl font-serif font-bold text-forest-green mb-2">Welcome Back, Dr. John Doe</h1>
+        <h1 className="text-3xl font-serif font-bold text-forest-green mb-2">
+          Welcome Back, {user?.name || 'Healthcare Professional'}
+        </h1>
         <p className="text-sm text-text-secondary">Here's what's happening in your clinic today</p>
       </div>
 
       {/* Stats Grid - Three Column Layout */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {stats.map((stat, index) => (
+        {[
+          { label: 'Total Patients', value: formatValue(stats.total_patients), icon: UserPlusIcon },
+          { label: 'Appointments Today', value: formatValue(stats.appointments_today), icon: CalendarIcon },
+          { label: 'Active Queue', value: formatValue(stats.active_queue), icon: ClockIcon },
+          { label: 'Completed Consultations', value: formatValue(stats.completed_consultations), icon: CheckCircleIcon },
+        ].map((stat, index) => (
           <div key={index} className="bg-white rounded-xl p-5 shadow-card hover:shadow-card-hover transition-all duration-200">
             <div className="flex items-start justify-between mb-4">
               <div className="p-3 rounded-lg bg-light-green text-forest-green">
@@ -87,21 +129,24 @@ export default function Dashboard() {
         <div className="bg-white rounded-xl p-6 shadow-card">
           <h2 className="text-xl font-serif font-bold text-forest-green mb-5">Recent Activity</h2>
           <div className="space-y-3">
-            {recentActivity.map((activity, index) => (
+            {queueItems.slice(0, 4).map((item, index) => (
               <div key={index} className="flex items-center justify-between p-3 hover:bg-light-green/30 rounded-lg transition-colors">
                 <div className="flex items-center space-x-3">
                   <div className="w-2 h-2 bg-forest-green rounded-full"></div>
                   <div>
-                    <p className="font-medium text-text-primary">{activity.title}</p>
-                    <p className="text-xs text-text-secondary">{activity.doctor}</p>
+                    <p className="font-medium text-text-primary">{item.patient_name} - {item.department}</p>
+                    <p className="text-xs text-text-secondary">Token: {item.token}</p>
                   </div>
                 </div>
-                <span className="text-xs text-text-secondary">{activity.time}</span>
+                <span className="text-xs text-text-secondary">Waiting</span>
               </div>
             ))}
+            {queueItems.length === 0 && (
+              <p className="text-sm text-text-secondary text-center py-4">No patients currently in queue</p>
+            )}
           </div>
           <Link 
-            to="/doctor-dashboard" 
+            to="/queue-management" 
             className="flex items-center justify-center w-full mt-4 text-forest-green font-medium hover:text-green-600 transition-colors"
           >
             View All Activity <ArrowRightIcon className="w-4 h-4 ml-2" />
