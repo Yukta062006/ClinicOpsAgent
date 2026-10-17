@@ -14,7 +14,8 @@ import {
   SpeakerXMarkIcon,
   FireIcon,
   MapPinIcon,
-  BuildingIcon
+  BuildingIcon,
+  Squares2X2Icon
 } from '@heroicons/react/24/outline'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useData } from '../context/DataContext'
@@ -386,6 +387,37 @@ export default function PatientDashboard() {
 
             {activeTab === 'health' && (
               <div className="space-y-4">
+                {/* Daily Zip Challenge Section */}
+                <motion.div 
+                  whileHover={{ scale: 1.02 }}
+                  className="bg-white rounded-xl p-5 shadow-card cursor-pointer"
+                  onClick={() => navigate('/daily-zip-challenge')}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-14 h-14 rounded-xl flex items-center justify-center bg-forest-green">
+                        <Squares2X2Icon className="w-8 h-8 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="font-serif font-bold text-xl text-forest-green">Daily Zip Challenge</h3>
+                        <p className="text-sm text-text-secondary">Complete today's path to keep your streak alive</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-3xl font-bold text-forest-green">{userStreak}</div>
+                      <div className="text-xs text-text-secondary">
+                        {userStreak === 1 ? 'Day Streak' : 'Days Streak'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex items-center justify-center">
+                    <div className="flex items-center space-x-2 text-sm text-green-600 bg-green-50 px-3 py-1 rounded-full">
+                      <CheckCircleIcon className="w-5 h-5" />
+                      <span>Ready to play</span>
+                    </div>
+                  </div>
+                </motion.div>
+
                 {/* Daily Streak Section */}
                 <motion.div 
                   whileHover={{ scale: 1.02 }}

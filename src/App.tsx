@@ -16,6 +16,7 @@ import ResearchSummary from './pages/ResearchSummary'
 import MedicalVideos from './pages/MedicalVideos'
 import HealthGames from './pages/HealthGames'
 import LearningProgress from './pages/LearningProgress'
+import DailyZipChallenge from './pages/DailyZipChallenge'
 import { DataProvider } from './context/DataContext'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -151,6 +152,16 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <LearningProgress />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/daily-zip-challenge"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <DailyZipChallenge />
               </Layout>
             </ProtectedRoute>
           }
