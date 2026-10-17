@@ -404,7 +404,9 @@ export default function PatientDashboard() {
                     </div>
                     <div className="text-right">
                       <div className="text-3xl font-bold text-forest-green">{userStreak}</div>
-                      <div className="text-xs text-text-secondary">Day Streak</div>
+                      <div className="text-xs text-text-secondary">
+                        {userStreak === 1 ? 'Day Streak' : 'Days Streak'}
+                      </div>
                     </div>
                   </div>
                   {streakCompleted ? (
