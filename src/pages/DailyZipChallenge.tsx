@@ -195,7 +195,10 @@ export default function DailyZipChallenge() {
 
   const startGame = () => {
     loadTodayPuzzle()
-    setActiveTab('game')
+    // Wait for puzzle to be set before changing tab
+    setTimeout(() => {
+      setActiveTab('game')
+    }, 100)
   }
 
   const getNodePosition = (x: number, y: number, gridSize: number) => {
@@ -427,7 +430,12 @@ export default function DailyZipChallenge() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <button
-              onClick={() => setActiveTab('dashboard')}
+              onClick={() => {
+                setActiveTab('dashboard')
+                setGameStatus('playing')
+                setShowPauseModal(false)
+                setShowCompletion(false)
+              }}
               className="flex items-center space-x-2 text-forest-green hover:text-green-600"
             >
               <XMarkIcon className="w-5 h-5" />
