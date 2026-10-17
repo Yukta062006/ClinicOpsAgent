@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { EnvelopeIcon, LockClosedIcon, UserIcon } from '@heroicons/react/24/outline'
 import { apiAuth } from '../utils/api'
@@ -9,6 +9,14 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const navigate = useNavigate()
+
+  // Redirect to dashboard if already logged in
+  useEffect(() => {
+    const token = localStorage.getItem('clinicops_token')
+    if (token) {
+      navigate('/dashboard')
+    }
+  }, [navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -22,7 +30,21 @@ export default function Login() {
         const { token, user } = response.data
         localStorage.setItem('clinicops_token', token)
         localStorage.setItem('clinicops_user', JSON.stringify(user))
-        navigate('/dashboard')
+        
+        // Redirect based on role
+        switch (user.role) {
+          case 'doctor':
+            navigate('/doctor-dashboard')
+            break
+          case 'frontdesk':
+            navigate('/front-desk')
+            break
+          case 'patient':
+            navigate('/patient-dashboard')
+            break
+          default:
+            navigate('/dashboard')
+        }
       } else {
         setError(response.error || 'Login failed. Please check your credentials.')
       }
@@ -103,10 +125,17 @@ export default function Login() {
         <div className="mt-6 text-center">
           <p className="text-sm text-text-secondary">
             Don't have an account?{' '}
-            <a href="#" className="text-forest-green font-medium hover:text-green-600 transition-colors">
+            <a href="/signup" className="text-forest-green font-medium hover:text-green-600 transition-colors">
               Sign up
             </a>
           </p>
+        </div>
+
+        {/* Admin Info */}
+        <div className="mt-6 p-4 bg-light-green rounded-lg">
+          <p className="text-xs text-text-secondary mb-2">Default Admin Account:</p>
+          <p className="text-sm text-text-primary font-mono">Email: admin@clinicops.com</p>
+          <p className="text-sm text-text-primary font-mono">Password: admin123</p>
         </div>
       </div>
     </div>

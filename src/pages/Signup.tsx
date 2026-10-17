@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { EnvelopeIcon, LockClosedIcon, UserIcon, PhoneIcon, briefcaseIcon } from '@heroicons/react/24/outline'
+import { EnvelopeIcon, LockClosedIcon, UserIcon, PhoneIcon } from '@heroicons/react/24/outline'
 import { apiAuth } from '../utils/api'
 
 export default function Signup() {
@@ -206,6 +206,13 @@ export default function Signup() {
               Sign in
             </a>
           </p>
+        </div>
+
+        {/* Admin Info */}
+        <div className="mt-6 p-4 bg-light-green rounded-lg">
+          <p className="text-xs text-text-secondary mb-2">Default Admin Account:</p>
+          <p className="text-sm text-text-primary font-mono">Email: admin@clinicops.com</p>
+          <p className="text-sm text-text-primary font-mono">Password: admin123</p>
         </div>
       </div>
     </div>
