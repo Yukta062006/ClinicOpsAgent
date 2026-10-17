@@ -34,6 +34,7 @@ export default function Signup() {
     }
 
     try {
+      console.log('Registering user:', { email, name, role })
       const response = await apiAuth.register({
         email,
         password,
@@ -43,16 +44,34 @@ export default function Signup() {
         specialty: specialty || undefined,
         department: department || undefined,
       })
-
+      
+      console.log('Register response:', response)
+      
       if (response.success && response.data) {
-        localStorage.setItem('clinicops_token', response.data.token)
-        localStorage.setItem('clinicops_user', JSON.stringify(response.data.user))
-        navigate('/dashboard')
+        const { token, user } = response.data
+        localStorage.setItem('clinicops_token', token)
+        localStorage.setItem('clinicops_user', JSON.stringify(user))
+        
+        // Redirect based on role
+        switch (user.role) {
+          case 'doctor':
+            navigate('/doctor-dashboard')
+            break
+          case 'frontdesk':
+            navigate('/front-desk')
+            break
+          case 'patient':
+            navigate('/patient-dashboard')
+            break
+          default:
+            navigate('/dashboard')
+        }
       } else {
         setError(response.error || 'Registration failed. Please try again.')
       }
-    } catch (err) {
-      setError('Network error. Please try again.')
+    } catch (err: any) {
+      console.error('Registration error:', err)
+      setError(err.message || 'Network error. Please try again.')
     } finally {
       setIsLoading(false)
     }
