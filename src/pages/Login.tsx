@@ -26,6 +26,8 @@ export default function Login() {
     try {
       const response = await apiAuth.login(email, password)
       
+      console.log('Login response:', response)
+      
       if (response.success && response.data) {
         const { token, user } = response.data
         localStorage.setItem('clinicops_token', token)
@@ -48,8 +50,9 @@ export default function Login() {
       } else {
         setError(response.error || 'Login failed. Please check your credentials.')
       }
-    } catch (err) {
-      setError('Network error. Please try again.')
+    } catch (err: any) {
+      console.error('Login error:', err)
+      setError(err.message || 'Network error. Please check if the server is running.')
     } finally {
       setIsLoading(false)
     }

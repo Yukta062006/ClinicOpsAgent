@@ -6,6 +6,32 @@ interface ApiResponse<T> {
   error?: string;
 }
 
+// Helper function for API calls with proper error handling
+async function handleResponse<T>(response: Response): Promise<ApiResponse<T>> {
+  const data = await response.json();
+  
+  if (!response.ok) {
+    return {
+      success: false,
+      error: data.error || `Request failed with status ${response.status}`
+    };
+  }
+  
+  return {
+    success: true,
+    data
+  };
+}
+
+// Helper to get auth headers
+function getAuthHeaders(token?: string) {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 // Auth API
 export const apiAuth = {
   login: async (email: string, password: string): Promise<ApiResponse<{ token: string; user: any }>> => {
@@ -14,7 +40,7 @@ export const apiAuth = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
-    return response.json();
+    return handleResponse(response);
   },
   
   register: async (data: {
@@ -31,14 +57,14 @@ export const apiAuth = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    return response.json();
+    return handleResponse(response);
   },
   
   me: async (token: string): Promise<ApiResponse<{ user: any }>> => {
     const response = await fetch(`${API_BASE_URL}/auth/me`, {
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: getAuthHeaders(token),
     });
-    return response.json();
+    return handleResponse(response);
   },
 };
 
@@ -46,21 +72,18 @@ export const apiAuth = {
 export const apiPatients = {
   getAll: async (token: string, search: string = '', limit: number = 50, offset: number = 0): Promise<ApiResponse<{ patients: any[]; total: number }>> => {
     const response = await fetch(`${API_BASE_URL}/patients?search=${search}&limit=${limit}&offset=${offset}`, {
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: getAuthHeaders(token),
     });
-    return response.json();
+    return handleResponse(response);
   },
   
   create: async (token: string, data: any): Promise<ApiResponse<{ patient: any }>> => {
     const response = await fetch(`${API_BASE_URL}/patients`, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}` 
-      },
+      headers: getAuthHeaders(token),
       body: JSON.stringify(data),
     });
-    return response.json();
+    return handleResponse(response);
   },
 };
 
@@ -75,33 +98,27 @@ export const apiAppointments = {
   }): Promise<ApiResponse<{ appointments: any[] }>> => {
     const query = new URLSearchParams(params as any).toString();
     const response = await fetch(`${API_BASE_URL}/appointments?${query}`, {
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: getAuthHeaders(token),
     });
-    return response.json();
+    return handleResponse(response);
   },
   
   create: async (token: string, data: any): Promise<ApiResponse<{ appointment: any }>> => {
     const response = await fetch(`${API_BASE_URL}/appointments`, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}` 
-      },
+      headers: getAuthHeaders(token),
       body: JSON.stringify(data),
     });
-    return response.json();
+    return handleResponse(response);
   },
   
   update: async (token: string, id: string, data: any): Promise<ApiResponse<{ appointment: any }>> => {
     const response = await fetch(`${API_BASE_URL}/appointments/${id}`, {
       method: 'PUT',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}` 
-      },
+      headers: getAuthHeaders(token),
       body: JSON.stringify(data),
     });
-    return response.json();
+    return handleResponse(response);
   },
 };
 
@@ -114,33 +131,27 @@ export const apiQueue = {
   }): Promise<ApiResponse<{ queue: any[] }>> => {
     const query = new URLSearchParams(params as any).toString();
     const response = await fetch(`${API_BASE_URL}/queue?${query}`, {
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: getAuthHeaders(token),
     });
-    return response.json();
+    return handleResponse(response);
   },
   
   callNext: async (token: string, doctor_id?: string): Promise<ApiResponse<{ patient: any; sound: boolean }>> => {
     const response = await fetch(`${API_BASE_URL}/queue/call-next`, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}` 
-      },
+      headers: getAuthHeaders(token),
       body: JSON.stringify({ doctor_id }),
     });
-    return response.json();
+    return handleResponse(response);
   },
   
   updateStatus: async (token: string, id: string, status: string): Promise<ApiResponse<{ queueItem: any }>> => {
     const response = await fetch(`${API_BASE_URL}/queue/${id}/status`, {
       method: 'PUT',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}` 
-      },
+      headers: getAuthHeaders(token),
       body: JSON.stringify({ status }),
     });
-    return response.json();
+    return handleResponse(response);
   },
 };
 
@@ -148,9 +159,9 @@ export const apiQueue = {
 export const apiDashboard = {
   getStats: async (token: string): Promise<ApiResponse<{ stats: any }>> => {
     const response = await fetch(`${API_BASE_URL}/dashboard/stats`, {
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: getAuthHeaders(token),
     });
-    return response.json();
+    return handleResponse(response);
   },
 };
 
@@ -158,21 +169,18 @@ export const apiDashboard = {
 export const apiResearch = {
   getSaved: async (token: string): Promise<ApiResponse<{ articles: any[] }>> => {
     const response = await fetch(`${API_BASE_URL}/articles/saved`, {
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: getAuthHeaders(token),
     });
-    return response.json();
+    return handleResponse(response);
   },
   
   save: async (token: string, data: any): Promise<ApiResponse<{ saved: boolean }>> => {
     const response = await fetch(`${API_BASE_URL}/articles/save`, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}` 
-      },
+      headers: getAuthHeaders(token),
       body: JSON.stringify(data),
     });
-    return response.json();
+    return handleResponse(response);
   },
 };
 
@@ -181,21 +189,18 @@ export const apiGames = {
   getScores: async (token: string, game_id?: string): Promise<ApiResponse<{ scores: any[]; highScores: any }>> => {
     const query = game_id ? `?game_id=${game_id}` : '';
     const response = await fetch(`${API_BASE_URL}/games/scores${query}`, {
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: getAuthHeaders(token),
     });
-    return response.json();
+    return handleResponse(response);
   },
   
   saveScore: async (token: string, data: any): Promise<ApiResponse<{ pointsEarned: number }>> => {
     const response = await fetch(`${API_BASE_URL}/games/save-score`, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}` 
-      },
+      headers: getAuthHeaders(token),
       body: JSON.stringify(data),
     });
-    return response.json();
+    return handleResponse(response);
   },
 };
 
@@ -203,20 +208,17 @@ export const apiGames = {
 export const apiLearning = {
   getProgress: async (token: string): Promise<ApiResponse<{ progress: any[]; points: any }>> => {
     const response = await fetch(`${API_BASE_URL}/learning/progress`, {
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: getAuthHeaders(token),
     });
-    return response.json();
+    return handleResponse(response);
   },
   
   completeLesson: async (token: string, data: any): Promise<ApiResponse<{ score: number }>> => {
     const response = await fetch(`${API_BASE_URL}/learning/complete-lesson`, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}` 
-      },
+      headers: getAuthHeaders(token),
       body: JSON.stringify(data),
     });
-    return response.json();
+    return handleResponse(response);
   },
 };

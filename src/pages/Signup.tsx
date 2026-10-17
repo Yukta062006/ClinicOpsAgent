@@ -34,7 +34,6 @@ export default function Signup() {
     }
 
     try {
-      console.log('Registering user:', { email, name, role, phone, specialty, department })
       const response = await apiAuth.register({
         email,
         password,
@@ -46,14 +45,9 @@ export default function Signup() {
       })
       
       console.log('Register response:', response)
-      console.log('Success:', response.success)
-      console.log('Data:', response.data)
-      console.log('Error:', response.error)
       
       if (response.success && response.data) {
         const { token, user } = response.data
-        console.log('Token:', token.substring(0, 50) + '...')
-        console.log('User:', user)
         localStorage.setItem('clinicops_token', token)
         localStorage.setItem('clinicops_user', JSON.stringify(user))
         
@@ -72,7 +66,6 @@ export default function Signup() {
             navigate('/dashboard')
         }
       } else {
-        console.log('Response failed:', response)
         setError(response.error || 'Registration failed. Please try again.')
       }
     } catch (err: any) {
