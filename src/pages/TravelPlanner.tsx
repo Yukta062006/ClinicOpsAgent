@@ -378,14 +378,14 @@ export default function TravelPlanner() {
           <MapContainer
             ref={mapRef as any}
             center={currentLocation || hospitalLocation.coordinates}
-            zoom={13}
+            zoom={16}
             style={{ height: '100%', width: '100%' }}
-            zoomControl={false}
+            zoomControl={true}
           >
-            <ResetView center={currentLocation || hospitalLocation.coordinates} zoom={13} />
+            <ResetView center={currentLocation || hospitalLocation.coordinates} zoom={16} />
             <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https:// Sentinel-2</a> contributors'
+              url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
             />
             
             {/* Hospital Marker */}
