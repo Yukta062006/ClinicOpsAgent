@@ -64,6 +64,8 @@ export default function PatientDashboard() {
   }
 
   const handleQuickAction = (type: 'visit' | 'records' | 'consultation' | 'game' | 'research' | 'summary') => {
+    setModalType(type)
+    setShowModal(true)
     switch (type) {
       case 'game':
         navigate('/health-games')
@@ -530,7 +532,17 @@ export default function PatientDashboard() {
                   <button 
                     onClick={() => {
                       if (modalType === 'game') {
-                        window.location.href = '/health-games'
+                        navigate('/health-games')
+                      } else if (modalType === 'visit') {
+                        navigate('/front-desk')
+                      } else if (modalType === 'records') {
+                        navigate('/learning-progress')
+                      } else if (modalType === 'consultation') {
+                        navigate('/patient-dashboard')
+                      } else if (modalType === 'research') {
+                        navigate('/medical-research')
+                      } else if (modalType === 'summary') {
+                        navigate('/research-summary')
                       } else {
                         alert(`Action: ${modalType} - Feature not implemented in this demo`)
                         closeModal()

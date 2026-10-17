@@ -529,15 +529,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setUserPoints(prev => prev + pointsEarned);
 
     // Update streak if done today
-    const lastLesson = prev => {
+    setUserStreak(prev => {
       const completedLessons = userLessons.filter(l => l.completed);
       if (completedLessons.length === 0) return 1;
       const lastDate = new Date(completedLessons[completedLessons.length - 1].dateCompleted);
       const today = new Date();
       const diffDays = Math.floor((today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
-      return diffDays <= 1 ? userStreak + 1 : 1;
-    };
-    setUserStreak(lastLesson);
+      return diffDays <= 1 ? prev + 1 : 1;
+    });
   };
 
   const toggleSound = () => {
