@@ -32,9 +32,16 @@ interface ResearchArticle {
 
 export default function MedicalResearch() {
   const [searchQuery, setSearchQuery] = useState('')
+  const [filterType, setFilterType] = useState<string | null>(null)
   const [selectedArticle, setSelectedArticle] = useState<ResearchArticle | null>(null)
   const [savedArticles, setSavedArticles] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+  const [articleTypes] = useState({
+    'clinical-trial': { label: 'Clinical Trial', color: 'bg-blue-100 text-blue-800' },
+    'review': { label: 'Review', color: 'bg-green-100 text-green-800' },
+    'case-study': { label: 'Case Study', color: 'bg-yellow-100 text-yellow-800' },
+    'guideline': { label: 'Guideline', color: 'bg-purple-100 text-purple-800' }
+  })
   
   const { 
     researchArticles, 
@@ -50,17 +57,17 @@ export default function MedicalResearch() {
   }, [savedResearch])
 
   // Filter articles
-  const filteredArticles = researchArticles.filter(article => 
-    article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    article.authors.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    article.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-  )
+  const filteredArticles = researchArticles.filter(article => {
+    const matchesSearch = article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      article.authors.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      article.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+    const matchesType = filterType ? article.type === filterType : true
+    return matchesSearch && matchesType
+  })
 
-  const articleTypes = {
-    'clinical-trial': { label: 'Clinical Trial', color: 'bg-blue-100 text-blue-800', icon: DocumentTextIcon2 },
-    'review': { label: 'Review', color: 'bg-green-100 text-green-800', icon: BookOpenIcon },
-    'case-study': { label: 'Case Study', color: 'bg-yellow-100 text-yellow-800', icon: CheckBadgeIcon },
-    'guideline': { label: 'Guideline', color: 'bg-purple-100 text-purple-800', icon: AcademicCapIcon }
+  const clearFilters = () => {
+    setSearchQuery('')
+    setFilterType(null)
   }
 
   const handleSaveToggle = (id: string, e: React.MouseEvent) => {
@@ -124,13 +131,37 @@ export default function MedicalResearch() {
         <motion.button 
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          onClick={() => setSearchQuery('')}
+          onClick={clearFilters}
           className="flex items-center space-x-2 bg-forest-green text-white px-6 py-3 rounded-lg font-medium hover:bg-green-600 transition-all shadow-card hover:shadow-card-hover"
         >
           <ScaleIcon className="w-5 h-5" />
           <span>Clear Filters</span>
         </motion.button>
       </div>
+
+      {/* Type Filter Buttons */}
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.15 }}
+        className="flex items-center space-x-2 mb-6 flex-wrap"
+      >
+        {Object.entries(articleTypes).map(([type, { label, color }]) => (
+          <motion.button
+            key={type}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setFilterType(filterType === type ? null : type)}
+            className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              filterType === type
+                ? `${color} ring-2 ring-offset-2 ring-forest-green`
+                : 'bg-warm-cream text-text-secondary hover:bg-light-green'
+            }`}
+          >
+            {label}
+          </motion.button>
+        ))}
+      </motion.div>
 
       {/* Search Section */}
       <motion.div 

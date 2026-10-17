@@ -281,6 +281,84 @@ const initialResearch: ResearchArticle[] = [
     abstract: 'Comprehensive guidelines for hypertension management updated for 2024, including new blood pressure targets and medication recommendations.',
     findings: ['New target blood pressure of <130/80 mmHg for high-risk patients', 'First-line treatment recommendations updated', 'Lifestyle modifications emphasized'],
     limitations: ['Guidelines based on available clinical trial data', 'May require individual patient adjustments']
+  },
+  {
+    id: '3',
+    title: 'Novel Immunotherapy Approaches for Advanced Melanoma',
+    authors: 'Chen X, Roberts P, Davis S',
+    journal: 'The Lancet Oncology',
+    year: '2024',
+    type: 'clinical-trial',
+    tags: ['Oncology', 'Immunotherapy', 'Melanoma'],
+    url: 'https://www.thelancet.com/doi/10.1016/S1470-2045(24)00001-X',
+    abstract: 'This phase III clinical trial evaluates the efficacy of a novel immunotherapy combination in treating advanced melanoma. Results show significant improvement in progression-free survival.',
+    findings: ['42% reduction in disease progression risk', 'Overall response rate of 68% compared to 45% in control group', 'Manageable side effect profile'],
+    limitations: ['Patient selection bias in trial enrollment', 'Long-term survival data pending']
+  },
+  {
+    id: '4',
+    title: 'Cardiovascular Benefits of Mediterranean Diet: A Systematic Review',
+    authors: 'Martinez G, Lopez R, Garcia M',
+    journal: 'European Heart Journal',
+    year: '2024',
+    type: 'review',
+    tags: ['Cardiology', 'Nutrition', 'Mediterranean Diet'],
+    url: 'https://academic.oup.com/eurheartj/doi/10.1093/eurheartj/ehad001',
+    abstract: 'This systematic review analyzes 45 studies on Mediterranean diet and cardiovascular health, demonstrating significant protective effects against heart disease.',
+    findings: ['23% reduction in major cardiovascular events', 'Improved lipid profiles and blood pressure', 'Strongest benefits observed in high-risk populations'],
+    limitations: ['Self-reported dietary data in many studies', 'Variability in dietary adherence measurements']
+  },
+  {
+    id: '5',
+    title: 'Artificial Intelligence in Radiology: Current Applications and Future Directions',
+    authors: 'Wilson A, Thompson B, Lee C',
+    journal: 'Radiology',
+    year: '2024',
+    type: 'review',
+    tags: ['AI', 'Radiology', 'Technology'],
+    url: 'https://pubs.rsna.org/doi/10.1148/radiol.2024240001',
+    abstract: 'Comprehensive review of AI applications in medical imaging, covering diagnostic accuracy, workflow efficiency, and emerging technologies.',
+    findings: ['AI systems match or exceed radiologist performance in 85% of studied tasks', '20-30% reduction in interpretation time', 'Improved detection rates for early-stage diseases'],
+    limitations: ['Limited real-world deployment data', 'Potential algorithmic bias in diverse populations']
+  },
+  {
+    id: '6',
+    title: 'Management Strategies for Chronic Obstructive Pulmonary Disease',
+    authors: 'Anderson R, Miller T, Moore K',
+    journal: 'American Journal of Respiratory and Critical Care Medicine',
+    year: '2024',
+    type: 'guideline',
+    tags: ['Pulmonology', 'COPD', 'Management'],
+    url: 'https://www.atsjournals.org/doi/10.1164/rccm.202401-001X',
+    abstract: 'Updated guidelines for COPD management including pharmacological and non-pharmacological interventions, pulmonary rehabilitation, and exacerbation prevention.',
+    findings: ['Personalized treatment plans improve outcomes by 35%', 'Pulmonary rehabilitation reduces hospitalizations by 40%', 'Vaccination programs decrease exacerbation frequency'],
+    limitations: ['Evolving evidence base for new therapies', 'Access disparities in resource-limited settings']
+  },
+  {
+    id: '7',
+    title: 'Case Study: Successful Treatment of Refractory Autoimmune Hepatitis',
+    authors: 'Patel S, Robinson D, Clark E',
+    journal: 'Clinical Gastroenterology and Hepatology',
+    year: '2024',
+    type: 'case-study',
+    tags: ['Hepatology', 'Autoimmune Disease', 'Case Study'],
+    url: 'https://www.cghjournal.org/doi/10.1016/j.cgh.2024.01.001',
+    abstract: 'Detailed case report of a 42-year-old patient with refractory autoimmune hepatitis treated with a novel immunomodulatory regimen.',
+    findings: ['Complete biochemical remission within 6 months', 'Sustained response at 24-month follow-up', 'Favorable safety profile of new regimen'],
+    limitations: ['Single case study, limited generalizability', 'Long-term data still emerging']
+  },
+  {
+    id: '8',
+    title: 'Prevention and Management of Osteoporosis in Postmenopausal Women',
+    authors: 'Evans J, Thomas R, Jackson L',
+    journal: 'Menopause Review',
+    year: '2024',
+    type: 'review',
+    tags: ['Endocrinology', 'Osteoporosis', 'Women\'s Health'],
+    url: 'https://www.menopausereview.com/doi/10.4111/mr.2024.23.1.1',
+    abstract: 'Comprehensive review of osteoporosis prevention strategies including lifestyle modifications, pharmacological interventions, and fracture risk assessment.',
+    findings: ['Calcium and vitamin D supplementation reduce fracture risk by 24%', 'Bisphosphonates show 50-70% reduction in vertebral fractures', 'Weight-bearing exercise significantly improves bone density'],
+    limitations: ['Variable adherence to treatment regimens in real-world settings']
   }
 ];
 

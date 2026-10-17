@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { 
   CalendarIcon, 
   ClockIcon, 
@@ -11,7 +11,10 @@ import {
   DocumentArrowUpIcon,
   BookOpenIcon,
   SpeakerWaveIcon,
-  SpeakerXMarkIcon
+  SpeakerXMarkIcon,
+  FireIcon,
+  MapPinIcon,
+  BuildingIcon
 } from '@heroicons/react/24/outline'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useData } from '../context/DataContext'
@@ -32,6 +35,7 @@ export default function PatientDashboard() {
   const [showModal, setShowModal] = useState(false)
   const [modalType, setModalType] = useState<'visit' | 'records' | 'consultation' | 'game' | 'research' | 'summary'>('visit')
   const [voiceEnabled, setVoiceEnabled] = useState(false)
+  const [streakCompleted, setStreakCompleted] = useState(false)
   const navigate = useNavigate()
   
   const { 
@@ -42,8 +46,28 @@ export default function PatientDashboard() {
     userStreak, 
     lessons,
     soundEnabled,
-    toggleSound
+    toggleSound,
+    completeLesson
   } = useData()
+
+  // Check if streak is already completed today
+  useEffect(() => {
+    const today = new Date().toDateString()
+    const completedStreak = localStorage.getItem('clinicops_streak_completed')
+    if (completedStreak === today) {
+      setStreakCompleted(true)
+    }
+  }, [])
+
+  const handleDailyStreak = () => {
+    if (!streakCompleted) {
+      const today = new Date().toDateString()
+      localStorage.setItem('clinicops_streak_completed', today)
+      setStreakCompleted(true)
+      completeLesson('streak', 100)
+      alert('Streak completed! Great job maintaining your health journey!')
+    }
+  }
 
   // Calculate real data from context
   const patientAppointments = appointments.slice(0, 4) as Appointment[]
@@ -362,6 +386,39 @@ export default function PatientDashboard() {
 
             {activeTab === 'health' && (
               <div className="space-y-4">
+                {/* Daily Streak Section */}
+                <motion.div 
+                  whileHover={{ scale: 1.02 }}
+                  className="bg-white rounded-xl p-5 shadow-card cursor-pointer"
+                  onClick={handleDailyStreak}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className={`w-14 h-14 rounded-xl flex items-center justify-center ${streakCompleted ? 'bg-green-100' : 'bg-yellow-100'}`}>
+                        <FireIcon className={`w-8 h-8 ${streakCompleted ? 'text-green-600' : 'text-yellow-600'}`} />
+                      </div>
+                      <div>
+                        <h3 className="font-serif font-bold text-xl text-forest-green">Daily Streak</h3>
+                        <p className="text-sm text-text-secondary">Complete daily health activity</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-3xl font-bold text-forest-green">{userStreak}</div>
+                      <div className="text-xs text-text-secondary">Day Streak</div>
+                    </div>
+                  </div>
+                  {streakCompleted ? (
+                    <div className="mt-4 p-3 bg-green-50 rounded-lg text-center">
+                      <CheckCircleIcon className="w-6 h-6 text-green-600 mx-auto mb-1" />
+                      <p className="text-sm text-green-700 font-medium">Streak completed today!</p>
+                    </div>
+                  ) : (
+                    <div className="mt-4 p-3 bg-yellow-50 rounded-lg text-center">
+                      <p className="text-sm text-yellow-700 font-medium">Click to complete today's health activity</p>
+                    </div>
+                  )}
+                </motion.div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <motion.div 
                     whileHover={{ scale: 1.02 }}

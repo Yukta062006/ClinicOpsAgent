@@ -23,6 +23,7 @@ export default function LearningProgress() {
   const [lessonProgress, setLessonProgress] = useState(0)
   const [quizAnswer, setQuizAnswer] = useState<string | null>(null)
   const [quizResult, setQuizResult] = useState<'correct' | 'incorrect' | null>(null)
+  const [currentLessonIndex, setCurrentLessonIndex] = useState(0)
   
   const { 
     lessons,
@@ -60,6 +61,10 @@ export default function LearningProgress() {
     setLessonProgress(0)
     setQuizAnswer(null)
     setQuizResult(null)
+    
+    // Determine lesson index for question variation
+    const index = parseInt(lessonId.replace('lesson-', '')) - 1
+    setCurrentLessonIndex(index)
 
     if (lessonId === 'lesson-1') {
       setCurrentLessonData({
@@ -81,7 +86,7 @@ export default function LearningProgress() {
           correct: 2
         }
       })
-    } else {
+    } else if (lessonId === 'lesson-3') {
       setCurrentLessonData({
         title: 'Nutrition Fundamentals',
         content: 'Proper nutrition is essential for maintaining good health and preventing chronic diseases. A balanced diet includes:\n\n• Carbohydrates: Your body\'s main source of energy\n• Proteins: Essential for building and repairing tissues\n• Fats: Important for brain function and hormone production\n• Vitamins and minerals: Support various bodily functions\n• Fiber: Promotes digestive health\n\nTips for healthy eating:\n1. Choose whole grains over refined grains\n2. Eat plenty of fruits and vegetables\n3. Limit added sugars and salt\n4. Drink water instead of sugary beverages\n5. Practice portion control',
@@ -89,6 +94,16 @@ export default function LearningProgress() {
           question: 'Which of the following is recommended for healthy eating?',
           options: ['Choose refined grains', 'Limit fruits and vegetables', 'Drink water instead of sugary beverages', 'Increase added sugars'],
           correct: 2
+        }
+      })
+    } else {
+      setCurrentLessonData({
+        title: 'Diabetes Prevention',
+        content: 'Diabetes is a chronic condition that affects how your body turns food into energy. Most of the food you eat is broken down into sugar (glucose) and released into your bloodstream. When your blood sugar goes up, it signals your pancreas to release insulin. Insulin acts like a key to let the blood sugar into your body\'s cells for use as energy.\n\nPreventing diabetes involves maintaining a healthy weight, eating a balanced diet, and getting regular physical activity. Even modest weight loss - about 5 to 7 percent of your body weight - can help prevent or delay type 2 diabetes.',
+        quiz: {
+          question: 'What is the primary function of insulin in the body?',
+          options: ['Break down carbohydrates', 'Regulate blood sugar levels', 'Build muscle tissue', 'Control heart rate'],
+          correct: 1
         }
       })
     }
