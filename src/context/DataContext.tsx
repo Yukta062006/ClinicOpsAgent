@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 
 // Types
 export interface Patient {
@@ -147,6 +147,10 @@ interface DataContextType {
   // Settings
   soundEnabled: boolean;
   toggleSound: () => void;
+  
+  // User
+  user: any;
+  setUser: (user: any) => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -428,6 +432,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return saved ? JSON.parse(saved) : true;
   });
 
+  const [user, setUser] = useState<any>(() => {
+    const saved = localStorage.getItem('clinicops_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+
   // Save to localStorage when state changes
   useEffect(() => { localStorage.setItem('clinicops_patients', JSON.stringify(patients)); }, [patients]);
   useEffect(() => { localStorage.setItem('clinicops_appointments', JSON.stringify(appointments)); }, [appointments]);
@@ -441,6 +450,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => { localStorage.setItem('clinicops_user_points', userPoints.toString()); }, [userPoints]);
   useEffect(() => { localStorage.setItem('clinicops_user_streak', userStreak.toString()); }, [userStreak]);
   useEffect(() => { localStorage.setItem('clinicops_sound_enabled', JSON.stringify(soundEnabled)); }, [soundEnabled]);
+  useEffect(() => { localStorage.setItem('clinicops_user', JSON.stringify(user)); }, [user]);
 
   const addPatient = (patient: Patient) => {
     setPatients(prev => [...prev, patient]);
@@ -572,6 +582,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     soundEnabled,
     toggleSound,
+    
+    user,
+    setUser,
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
