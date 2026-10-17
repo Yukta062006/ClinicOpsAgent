@@ -225,15 +225,16 @@ export default function MedicalResearch() {
             className="bg-white rounded-lg shadow-card hover:shadow-card-hover p-6 border border-pale-sage transition-shadow cursor-pointer"
             onClick={() => setSelectedArticle(article)}
           >
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex items-center space-x-3">
-                <BookOpenIcon className="w-5 h-5 text-pale-sage" />
+            <div className="flex items-start mb-3">
+              <BookOpenIcon className="w-5 h-5 text-pale-sage flex-shrink-0" />
+              <div className="flex items-center space-x-3 flex-1">
                 <span className="font-bold text-forest-green">{article.journal}</span>
                 <span className="text-sm text-text-secondary">• {article.year}</span>
               </div>
               <motion.div
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
+                className="flex-shrink-0 ml-3"
               >
                 <span className={`px-3 py-1 rounded-full text-xs font-medium ${articleTypes[article.type].color}`}>
                   {articleTypes[article.type].label}
