@@ -159,11 +159,11 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 const initialPatients: Patient[] = [
   {
     id: '1',
-    name: 'Alice Johnson',
+    name: 'Aarav Sharma',
     age: 34,
-    gender: 'F',
+    gender: 'M',
     phone: '(555) 123-4567',
-    email: 'alice.johnson@example.com',
+    email: 'aarav.sharma@example.com',
     address: '123 Main St, Metropolis, NY 10001',
     dateOfBirth: '1990-05-15',
     medicalHistory: ['Hypertension', 'Seasonal allergies'],
@@ -175,11 +175,11 @@ const initialPatients: Patient[] = [
   },
   {
     id: '2',
-    name: 'Bob Smith',
+    name: 'Ananya Verma',
     age: 45,
-    gender: 'M',
+    gender: 'F',
     phone: '(555) 987-6543',
-    email: 'bob.smith@example.com',
+    email: 'ananya.verma@example.com',
     address: '456 Oak Ave, Metropolis, NY 10002',
     dateOfBirth: '1979-08-22',
     medicalHistory: ['Diabetes', 'Hyperlipidemia'],
@@ -191,11 +191,11 @@ const initialPatients: Patient[] = [
   },
   {
     id: '3',
-    name: 'Carol Williams',
+    name: 'Rahul Mishra',
     age: 28,
-    gender: 'F',
+    gender: 'M',
     phone: '(555) 456-7890',
-    email: 'carol.williams@example.com',
+    email: 'rahul.mishra@example.com',
     address: '789 Pine Rd, Metropolis, NY 10003',
     dateOfBirth: '1996-03-10',
     medicalHistory: ['Asthma'],
@@ -207,11 +207,11 @@ const initialPatients: Patient[] = [
   },
   {
     id: '4',
-    name: 'David Brown',
+    name: 'Priya Singh',
     age: 52,
-    gender: 'M',
+    gender: 'F',
     phone: '(555) 234-5678',
-    email: 'david.brown@example.com',
+    email: 'priya.singh@example.com',
     address: '321 Elm St, Metropolis, NY 10004',
     dateOfBirth: '1972-11-05',
     medicalHistory: ['Heart Disease', 'Obesity'],
@@ -223,11 +223,11 @@ const initialPatients: Patient[] = [
   },
   {
     id: '5',
-    name: 'Emma Davis',
+    name: 'Aditya Patil',
     age: 31,
-    gender: 'F',
+    gender: 'M',
     phone: '(555) 345-6789',
-    email: 'emma.davis@example.com',
+    email: 'aditya.patil@example.com',
     address: '654 Maple Dr, Metropolis, NY 10005',
     dateOfBirth: '1993-07-18',
     medicalHistory: ['Migraine'],
@@ -240,19 +240,19 @@ const initialPatients: Patient[] = [
 ];
 
 const initialAppointments: Appointment[] = [
-  { id: '1', patientId: '1', patientName: 'Alice Johnson', doctorId: 'doc1', doctorName: 'Dr. Sarah Smith', time: '09:00 AM', type: 'General Checkup', status: 'scheduled', notes: 'Annual physical exam' },
-  { id: '2', patientId: '2', patientName: 'Bob Smith', doctorId: 'doc2', doctorName: 'Dr. John Doe', time: '09:30 AM', type: 'Follow-up', status: 'scheduled', notes: 'Diabetes management check' },
-  { id: '3', patientId: '3', patientName: 'Carol Williams', doctorId: 'doc3', doctorName: 'Dr. Emily Chen', time: '10:00 AM', type: 'Specialist Consultation', status: 'scheduled', notes: 'Asthma evaluation' },
-  { id: '4', patientId: '4', patientName: 'David Brown', doctorId: 'doc4', doctorName: 'Dr. Michael Brown', time: '10:30 AM', type: 'Cardiology Consult', status: 'scheduled', notes: 'Heart disease follow-up' },
-  { id: '5', patientId: '1', patientName: 'Alice Johnson', doctorId: 'doc1', doctorName: 'Dr. Sarah Smith', time: '02:00 PM', type: 'Consultation', status: 'completed', notes: 'Prescription renewal' },
+  { id: '1', patientId: '1', patientName: 'Aarav Sharma', doctorId: 'doc1', doctorName: 'Dr. Sarah Smith', time: '09:00 AM', type: 'General Checkup', status: 'scheduled', notes: 'Annual physical exam' },
+  { id: '2', patientId: '2', patientName: 'Ananya Verma', doctorId: 'doc2', doctorName: 'Dr. John Doe', time: '09:30 AM', type: 'Follow-up', status: 'scheduled', notes: 'Diabetes management check' },
+  { id: '3', patientId: '3', patientName: 'Rahul Mishra', doctorId: 'doc3', doctorName: 'Dr. Emily Chen', time: '10:00 AM', type: 'Specialist Consultation', status: 'scheduled', notes: 'Asthma evaluation' },
+  { id: '4', patientId: '4', patientName: 'Priya Singh', doctorId: 'doc4', doctorName: 'Dr. Michael Brown', time: '10:30 AM', type: 'Cardiology Consult', status: 'scheduled', notes: 'Heart disease follow-up' },
+  { id: '5', patientId: '1', patientName: 'Aarav Sharma', doctorId: 'doc1', doctorName: 'Dr. Sarah Smith', time: '02:00 PM', type: 'Consultation', status: 'completed', notes: 'Prescription renewal' },
 ];
 
 const initialQueue: QueueItem[] = [
-  { id: '1', token: '#125', patientId: '1', patientName: 'Alice Johnson', arrivalTime: '09:00 AM', status: 'completed', priority: 'normal', department: 'General Practice', reason: 'Follow-up' },
-  { id: '2', token: '#126', patientId: '2', patientName: 'Bob Smith', arrivalTime: '09:15 AM', status: 'in-progress', priority: 'urgent', department: 'General Practice', reason: 'Diabetes management' },
-  { id: '3', token: '#127', patientId: '3', patientName: 'Carol Williams', arrivalTime: '09:30 AM', status: 'waiting', priority: 'normal', department: 'Specialty Care', reason: 'Asthma evaluation' },
-  { id: '4', token: '#128', patientId: '4', patientName: 'David Brown', arrivalTime: '09:45 AM', status: 'waiting', priority: 'normal', department: 'Cardiology', reason: 'Heart disease follow-up' },
-  { id: '5', token: '#129', patientId: '5', patientName: 'Emma Davis', arrivalTime: '10:00 AM', status: 'waiting', priority: 'normal', department: 'General Practice', reason: 'Migraine treatment' },
+  { id: '1', token: '#125', patientId: '1', patientName: 'Aarav Sharma', arrivalTime: '09:00 AM', status: 'completed', priority: 'normal', department: 'General Practice', reason: 'Follow-up' },
+  { id: '2', token: '#126', patientId: '2', patientName: 'Ananya Verma', arrivalTime: '09:15 AM', status: 'in-progress', priority: 'urgent', department: 'General Practice', reason: 'Diabetes management' },
+  { id: '3', token: '#127', patientId: '3', patientName: 'Rahul Mishra', arrivalTime: '09:30 AM', status: 'waiting', priority: 'normal', department: 'Specialty Care', reason: 'Asthma evaluation' },
+  { id: '4', token: '#128', patientId: '4', patientName: 'Priya Singh', arrivalTime: '09:45 AM', status: 'waiting', priority: 'normal', department: 'Cardiology', reason: 'Heart disease follow-up' },
+  { id: '5', token: '#129', patientId: '5', patientName: 'Aditya Patil', arrivalTime: '10:00 AM', status: 'waiting', priority: 'normal', department: 'General Practice', reason: 'Migraine treatment' },
 ];
 
 const initialResearch: ResearchArticle[] = [
@@ -294,7 +294,7 @@ const initialVideos: Video[] = [
     verified: true,
     category: 'Diabetes',
     description: 'Comprehensive guide to understanding diabetes, including different types, common symptoms, and effective management strategies.',
-    url: 'https://example.com/video1',
+    url: 'https://www.youtube.com/embed/8K6aW9VxG4M',
     thumbnail: 'https://placehold.co/600x400/285640/FFFFFF?text=Diabetes+Education',
     saved: false
   },
@@ -307,7 +307,7 @@ const initialVideos: Video[] = [
     verified: true,
     category: 'Cardiology',
     description: 'Learn about cardiovascular disease risk factors, prevention strategies, and the importance of early detection.',
-    url: 'https://example.com/video2',
+    url: 'https://www.youtube.com/embed/1g7i0wJFJc4',
     thumbnail: 'https://placehold.co/600x400/285640/FFFFFF?text=Heart+Health',
     saved: false
   },
@@ -319,8 +319,8 @@ const initialVideos: Video[] = [
     views: '2.1M views',
     verified: true,
     category: 'Nutrition',
-    description: 'Essential nutrition principles for maintaining good health. This video covers macronutrients, micronutrients, and practical meal planning tips.',
-    url: 'https://example.com/video3',
+    description: 'Essential nutrition principles for maintaining good health.',
+    url: 'https://www.youtube.com/embed/7D7oM9N9J7c',
     thumbnail: 'https://placehold.co/600x400/285640/FFFFFF?text=Nutrition+Basics',
     saved: false
   }

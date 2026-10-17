@@ -336,15 +336,21 @@ export default function MedicalVideos() {
               </div>
 
               <div className="p-6">
-                {/* Fake video player */}
-                <div className="relative w-full aspect-video bg-pale-sage/30 rounded-lg flex items-center justify-center mb-6 border border-pale-sage">
-                  <div className="text-center">
-                    <VideoCameraIcon className="w-20 h-20 text-pale-sage mx-auto mb-4" />
-                    <p className="text-text-secondary">Video Player</p>
-                    <p className="text-sm text-text-secondary mt-2">
-                      This would play: {selectedVideo.url}
-                    </p>
-                  </div>
+                {/* Real YouTube video player */}
+                <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden mb-6">
+                  {selectedVideo.url.includes('youtube.com') ? (
+                    <iframe
+                      src={selectedVideo.url}
+                      className="w-full h-full border-0"
+                      title={selectedVideo.title}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-white">
+                      <p>Video player would load: {selectedVideo.url}</p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-4">
