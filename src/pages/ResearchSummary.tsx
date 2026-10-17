@@ -11,7 +11,8 @@ import {
   XMarkIcon,
   PlayIcon,
   PauseIcon,
-  StopIcon
+  StopIcon,
+  HeartIcon
 } from '@heroicons/react/24/outline'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useData } from '../context/DataContext'

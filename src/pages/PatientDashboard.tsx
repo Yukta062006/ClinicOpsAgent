@@ -8,10 +8,14 @@ import {
   PlayIcon,
   DocumentTextIcon,
   CheckCircleIcon,
-  DocumentArrowUpIcon
+  DocumentArrowUpIcon,
+  BookOpenIcon,
+  SpeakerWaveIcon,
+  SpeakerXMarkIcon
 } from '@heroicons/react/24/outline'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useData } from '../context/DataContext'
+import { useNavigate } from 'react-router-dom'
 
 interface Appointment {
   id: string
@@ -26,7 +30,9 @@ interface Appointment {
 export default function PatientDashboard() {
   const [activeTab, setActiveTab] = useState<'appointments' | 'learning' | 'health'>('appointments')
   const [showModal, setShowModal] = useState(false)
-  const [modalType, setModalType] = useState<'visit' | 'records' | 'consultation' | 'game'>('visit')
+  const [modalType, setModalType] = useState<'visit' | 'records' | 'consultation' | 'game' | 'research' | 'summary'>('visit')
+  const [voiceEnabled, setVoiceEnabled] = useState(false)
+  const navigate = useNavigate()
   
   const { 
     appointments, 
@@ -34,7 +40,9 @@ export default function PatientDashboard() {
     startLesson, 
     userPoints, 
     userStreak, 
-    lessons 
+    lessons,
+    soundEnabled,
+    toggleSound
   } = useData()
 
   // Calculate real data from context
@@ -55,15 +63,26 @@ export default function PatientDashboard() {
     points: userPoints
   }
 
-  const handleQuickAction = (type: 'visit' | 'records' | 'consultation' | 'game') => {
-    if (type === 'game') {
-      window.location.href = '/health-games'
-    } else if (type === 'visit') {
-      window.location.href = '/front-desk'
-    } else if (type === 'records') {
-      window.location.href = '/learning-progress'
-    } else if (type === 'consultation') {
-      window.location.href = '/patient-dashboard'
+  const handleQuickAction = (type: 'visit' | 'records' | 'consultation' | 'game' | 'research' | 'summary') => {
+    switch (type) {
+      case 'game':
+        navigate('/health-games')
+        break
+      case 'visit':
+        navigate('/front-desk')
+        break
+      case 'records':
+        navigate('/learning-progress')
+        break
+      case 'consultation':
+        navigate('/patient-dashboard')
+        break
+      case 'research':
+        navigate('/medical-research')
+        break
+      case 'summary':
+        navigate('/research-summary')
+        break
     }
   }
 
@@ -307,6 +326,35 @@ export default function PatientDashboard() {
                     </motion.div>
                   ))}
                 </div>
+                
+                {/* Voice Summary Section */}
+                <div className="p-4 bg-pale-sage/30 rounded-lg border border-pale-sage">
+                  <h3 className="font-serif font-bold mb-3 text-forest-green">Voice Summary</h3>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm text-text-secondary">Listen to your health records and learning progress summaries</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setVoiceEnabled(!voiceEnabled)
+                      if (!voiceEnabled) {
+                        const utterance = new SpeechSynthesisUtterance('Here is your health summary. You have completed 3 lessons with an average score of 92 percent. Your current streak is 14 days.')
+                        utterance.rate = 1
+                        utterance.pitch = 1
+                        window.speechSynthesis.speak(utterance)
+                      } else {
+                        window.speechSynthesis.cancel()
+                      }
+                    }}
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all ${
+                      voiceEnabled 
+                        ? 'bg-green-500 text-white' 
+                        : 'bg-forest-green text-white'
+                    }`}
+                  >
+                    {voiceEnabled ? <SpeakerXMarkIcon className="w-5 h-5" /> : <SpeakerWaveIcon className="w-5 h-5" />}
+                    <span>{voiceEnabled ? 'Stop Reading' : 'Read Summary Aloud'}</span>
+                  </button>
+                </div>
               </div>
             )}
 
@@ -392,6 +440,24 @@ export default function PatientDashboard() {
               >
                 <PlayIcon className="w-4 h-4" />
                 <span>Start Health Game</span>
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => handleQuickAction('research')}
+                className="w-full flex items-center space-x-3 p-2.5 bg-warm-cream/50 text-forest-green rounded-lg hover:bg-light-green hover:text-forest-green transition-colors text-sm"
+              >
+                <BookOpenIcon className="w-4 h-4" />
+                <span>Medical Research</span>
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => handleQuickAction('summary')}
+                className="w-full flex items-center space-x-3 p-2.5 bg-warm-cream/50 text-forest-green rounded-lg hover:bg-light-green hover:text-forest-green transition-colors text-sm"
+              >
+                <SpeakerWaveIcon className="w-4 h-4" />
+                <span>Voice Summary</span>
               </motion.button>
             </div>
           </motion.div>

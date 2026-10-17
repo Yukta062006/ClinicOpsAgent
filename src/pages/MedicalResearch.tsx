@@ -10,7 +10,8 @@ import {
   XMarkIcon,
   AcademicCapIcon,
   CheckBadgeIcon,
-  DocumentTextIcon as DocumentTextIcon2
+  DocumentTextIcon as DocumentTextIcon2,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useData } from '../context/DataContext'
