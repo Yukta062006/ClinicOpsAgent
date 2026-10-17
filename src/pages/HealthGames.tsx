@@ -134,6 +134,15 @@ export default function HealthGames() {
     setHighScores(userScores)
   }, [userScores])
 
+  // Initialize game when a game is selected
+  useEffect(() => {
+    if (selectedGame) {
+      setCurrentGameType(selectedGame.type)
+    } else {
+      setCurrentGameType('')
+    }
+  }, [selectedGame?.id])
+
   const gamesList: Game[] = [
     {
       id: 'memory-match',
@@ -949,8 +958,8 @@ export default function HealthGames() {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => {
-                    setSelectedGame(gamesList[0])
-                    setCurrentGameType(gamesList[0].type)
+                    setSelectedGame(game)
+                    setCurrentGameType(game.type)
                   }}
                   className="mt-6 px-8 py-3 bg-forest-green text-white rounded-lg font-bold hover:bg-green-600 transition-colors shadow-card hover:shadow-card-hover"
                 >
