@@ -602,10 +602,15 @@ export default function LearningProgress() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => {
-                  closeLesson()
-                  // Reset quiz state for a new lesson attempt
-                  setQuizResult(null)
+                  // Reset all state and start fresh lesson
+                  setCurrentLesson(null)
+                  setCurrentLessonData(null)
+                  setLessonProgress(0)
                   setQuizAnswer(null)
+                  setQuizResult(null)
+                  setTimeout(() => {
+                    startLesson('lesson-1')
+                  }, 100)
                 }}
                 className="px-6 py-3 bg-forest-green text-white rounded-lg font-medium hover:bg-green-600"
               >
