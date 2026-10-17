@@ -359,27 +359,19 @@ export default function ResearchSummary() {
             className="bg-white rounded-lg shadow-card hover:shadow-card-hover p-6 border border-pale-sage"
           >
             <h3 className="text-lg font-serif font-bold mb-4 text-forest-green">Article Details</h3>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between py-2 border-b border-light-green">
-                <span className="text-sm text-text-secondary">Year</span>
-                <span className="font-medium text-forest-green">{currentArticle.year}</span>
-              </div>
-              <div className="flex items-center justify-between py-2 border-b border-light-green">
-                <span className="text-sm text-text-secondary">Journal</span>
-                <span className="font-medium text-forest-green">{currentArticle.journal}</span>
-              </div>
-              <div className="flex items-center justify-between py-2 border-b border-light-green">
-                <span className="text-sm text-text-secondary">Study Type</span>
-                <span className="font-medium text-forest-green">Cohort Study</span>
-              </div>
-              <div className="flex items-center justify-between py-2 border-b border-light-green">
-                <span className="text-sm text-text-secondary">Sample Size</span>
-                <span className="font-medium text-forest-green">500 patients</span>
-              </div>
-              <div className="flex items-center justify-between py-2">
-                <span className="text-sm text-text-secondary">Follow-up</span>
-                <span className="font-medium text-forest-green">5 years</span>
-              </div>
+            <div className="space-y-3">
+              {[
+                { label: 'Year', value: currentArticle.year },
+                { label: 'Journal', value: currentArticle.journal },
+                { label: 'Study Type', value: 'Cohort Study' },
+                { label: 'Sample Size', value: '500 patients' },
+                { label: 'Follow-up', value: '5 years' }
+              ].map((item, index) => (
+                <div key={index} className="flex items-center gap-3 py-2 border-b border-light-green">
+                  <span className="flex-shrink-0 w-24 text-sm text-text-secondary">{item.label}</span>
+                  <span className="flex-1 text-right text-sm font-medium text-forest-green break-words">{item.value}</span>
+                </div>
+              ))}
             </div>
           </motion.div>
 
