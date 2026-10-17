@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { 
   MapIcon, 
   ArrowsRightLeftIcon, 
@@ -9,15 +9,42 @@ import {
   InformationCircleIcon,
   MapPinIcon,
   ClockIcon,
-  ParkIcon
+  ParkIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline'
 import { motion } from 'framer-motion'
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 'react-leaflet'
+import 'leaflet/dist/leaflet.css'
+import L from 'leaflet'
+
+// Fix for default marker icon
+// @ts-ignore
+delete L.Icon.Default.prototype._getIconUrl
+// @ts-ignore
+delete L.Icon.Default.prototype._getShadowUrl
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+})
+
+// Reset map view component
+function ResetView({ center, zoom }: { center: L.LatLngExpression; zoom: number }) {
+  const map = useMap()
+  useEffect(() => {
+    map.setView(center, zoom)
+  }, [center, zoom])
+  return null
+}
 
 export default function TravelPlanner() {
   const [travelMode, setTravelMode] = useState<'car' | 'public' | 'walking'>('car')
   const [loading, setLoading] = useState(false)
   const [directions, setDirections] = useState<{ time: string; distance: string; steps: string[] } | null>(null)
   const [origin, setOrigin] = useState('')
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [mapError, setMapError] = useState<string | null>(null)
+  const mapRef = useRef<MapContainer | null>(null)
 
   const hospitalLocation = {
     name: 'City General Hospital',
@@ -28,6 +55,25 @@ export default function TravelPlanner() {
     phone: '(555) 123-4567',
     coordinates: { lat: 40.7128, lng: -74.0060 }
   }
+
+  // Get current location
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setCurrentLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          })
+          setMapError(null)
+        },
+        (error) => {
+          setMapError('Location permission denied. Using default location.')
+          console.error('Geolocation error:', error)
+        }
+      )
+    }
+  }, [])
 
   const estimatedTimes = {
     car: { time: '15 min', distance: '8 miles' },
@@ -315,39 +361,113 @@ export default function TravelPlanner() {
         className="mt-8 bg-white rounded-lg shadow-card hover:shadow-card-hover p-6 border border-pale-sage"
       >
         <h2 className="text-xl font-serif font-bold mb-4 text-forest-green">Map to Hospital</h2>
-        <div className="w-full h-96 bg-light-green rounded-lg flex items-center justify-center relative overflow-hidden border border-pale-sage">
-          <div className="absolute inset-0 bg-gradient-to-br from-pale-sage/20 to-forest-green/10"></div>
-          <div className="text-center">
-            <MapPinIcon className="w-12 h-12 text-pale-sage mx-auto mb-4" />
-            <h3 className="text-2xl font-serif font-bold text-forest-green mb-2">City General Hospital</h3>
-            <p className="text-text-secondary max-w-md mx-auto">
-              Interactive map showing the hospital location and nearby landmarks. 
-              Select your starting point to get directions.
-            </p>
-          </div>
+        
+        {/* Map Error Notification */}
+        {mapError && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800 flex items-center space-x-2"
+          >
+            <XMarkIcon className="w-5 h-5" />
+            <span>{mapError}</span>
+          </motion.div>
+        )}
+
+        <div className="w-full h-96 rounded-lg overflow-hidden border border-pale-sage">
+          <MapContainer
+            ref={mapRef as any}
+            center={currentLocation || hospitalLocation.coordinates}
+            zoom={13}
+            style={{ height: '100%', width: '100%' }}
+            zoomControl={false}
+          >
+            <ResetView center={currentLocation || hospitalLocation.coordinates} zoom={13} />
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            
+            {/* Hospital Marker */}
+            <Marker position={hospitalLocation.coordinates}>
+              <Popup>
+                <div className="text-center">
+                  <MapPinIcon className="w-8 h-8 text-forest-green mx-auto mb-2" />
+                  <h4 className="font-bold text-forest-green">{hospitalLocation.name}</h4>
+                  <p className="text-xs text-text-secondary">{hospitalLocation.address}</p>
+                  <button 
+                    onClick={() => {
+                      if (currentLocation) {
+                        setOrigin(`${currentLocation.lat}, ${currentLocation.lng}`)
+                      } else {
+                        alert('Please allow location access to use this feature')
+                      }
+                    }}
+                    className="mt-2 px-3 py-1 bg-forest-green text-white text-sm rounded hover:bg-green-600"
+                  >
+                    Get Directions from Here
+                  </button>
+                </div>
+              </Popup>
+            </Marker>
+
+            {/* User's Current Location Marker */}
+            {currentLocation && (
+              <Marker position={currentLocation}>
+                <Popup>
+                  <div className="text-center">
+                    <div className="w-8 h-8 bg-blue-500 rounded-full mx-auto mb-2"></div>
+                    <span className="font-medium text-forest-green">Your Location</span>
+                  </div>
+                </Popup>
+              </Marker>
+            )}
+          </MapContainer>
+          
+          {/* Map Controls */}
           <div className="absolute bottom-4 right-4 flex space-x-2">
             <motion.button 
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
+              onClick={() => {
+                if (currentLocation) {
+                  mapRef.current?.setView(currentLocation, 13)
+                } else {
+                  mapRef.current?.setView(hospitalLocation.coordinates, 13)
+                }
+              }}
               className="w-10 h-10 bg-white rounded-lg shadow-sm flex items-center justify-center hover:bg-gray-50 border border-gray-200"
             >
-              <span className="text-xl font-bold">+</span>
-            </motion.button>
-            <motion.button 
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              className="w-10 h-10 bg-white rounded-lg shadow-sm flex items-center justify-center hover:bg-gray-50 border border-gray-200"
-            >
-              <span className="text-xl font-bold">-</span>
+              <MapPinIcon className="w-5 h-5 text-forest-green" />
             </motion.button>
           </div>
         </div>
-        <div className="mt-4 flex items-center justify-center space-x-4">
-          <button className="flex items-center space-x-2 px-4 py-2 bg-pale-sage text-white rounded-lg hover:bg-forest-green transition-colors">
+        
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+          <button 
+            onClick={() => {
+              if (currentLocation) {
+                setOrigin(`${currentLocation.lat}, ${currentLocation.lng}`)
+                alert(`Location set to: ${currentLocation.lat.toFixed(4)}, ${currentLocation.lng.toFixed(4)}`)
+              } else {
+                alert('Please allow location access to use your current location')
+              }
+            }}
+            className="flex items-center space-x-2 px-4 py-2 bg-pale-sage text-white rounded-lg hover:bg-forest-green transition-colors"
+          >
             <MapPinIcon className="w-5 h-5" />
             <span>Use Current Location</span>
           </button>
-          <button className="flex items-center space-x-2 px-4 py-2 bg-warm-cream text-text-secondary rounded-lg hover:bg-gray-200 transition-colors">
+          <button 
+            onClick={() => {
+              if (hospitalLocation && currentLocation) {
+                window.open(`https://www.google.com/maps/dir/?api=1&destination=${hospitalLocation.coordinates.lat},${hospitalLocation.coordinates.lng}`, '_blank')
+              } else {
+                alert('Please allow location access to get directions')
+              }
+            }}
+            className="flex items-center space-x-2 px-4 py-2 bg-warm-cream text-text-secondary rounded-lg hover:bg-gray-200 transition-colors"
+          >
             <MapIcon className="w-5 h-5" />
             <span>Open in Google Maps</span>
           </button>
