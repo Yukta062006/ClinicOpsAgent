@@ -32,6 +32,7 @@ export default function MedicalVideos() {
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null)
   const [subscribedChannels, setSubscribedChannels] = useState<string[]>([])
+  const [savedVideos, setSavedVideos] = useState<string[]>([])
   
   const { 
     videos: contextVideos, 
@@ -39,10 +40,10 @@ export default function MedicalVideos() {
     subscribeToChannel
   } = useData()
 
-  // Sync with context
+  // Sync saved videos from context
   useEffect(() => {
-    // This would normally sync saved state from context
-    // For now, use local state for demo
+    const saved = contextVideos.filter(v => v.saved).map(v => v.id)
+    setSavedVideos(saved)
   }, [contextVideos])
 
   const categories = ['all', 'Diabetes', 'Cardiology', 'Nutrition', 'Mental Health', 'Vaccines', 'Fitness']
@@ -63,6 +64,12 @@ export default function MedicalVideos() {
   const handleSaveToggle = (video: Video, e: React.MouseEvent) => {
     e.stopPropagation()
     toggleSaveVideo(video.id)
+    // Toggle locally for immediate feedback
+    setSavedVideos(prev => 
+      prev.includes(video.id) 
+        ? prev.filter(id => id !== video.id) 
+        : [...prev, video.id]
+    )
   }
 
   const handleWatch = (video: Video) => {
@@ -206,18 +213,14 @@ export default function MedicalVideos() {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={(e) => handleSaveToggle(video, e)}
-                  className="flex items-center space-x-2 px-3 py-2 bg-light-green text-text-secondary rounded-lg hover:bg-pale-sage/50 transition-colors"
+                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
+                    savedVideos.includes(video.id)
+                      ? 'bg-red-100 text-red-600 hover:bg-red-200'
+                      : 'bg-light-green text-text-secondary hover:bg-pale-sage/50'
+                  }`}
                 >
-                  <HeartIcon className="w-4 h-4" />
-                  <span className="text-sm">Like</span>
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="flex items-center space-x-2 px-3 py-2 bg-light-green text-text-secondary rounded-lg hover:bg-pale-sage/50 transition-colors"
-                >
-                  <ArrowDownTrayIcon className="w-4 h-4" />
-                  <span className="text-sm">Save</span>
+                  <HeartIcon className={`w-4 h-4 ${savedVideos.includes(video.id) ? 'fill-current' : ''}`} />
+                  <span className="text-sm">{savedVideos.includes(video.id) ? 'Saved' : 'Like'}</span>
                 </motion.button>
                 <motion.button
                   whileHover={{ scale: 1.05 }}

@@ -242,10 +242,10 @@ export default function ResearchSummary() {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={toggleReadAloud}
-          className={`flex items-center space-x-3 px-6 py-3 rounded-lg font-medium transition-all ${
+          className={`flex items-center space-x-3 px-6 py-3 rounded-lg font-medium transition-all shadow-card ${
             audioPlaying 
-              ? 'bg-green-500 text-white shadow-card hover:shadow-card-hover' 
-              : 'bg-pale-sage text-white hover:bg-forest-green'
+              ? 'bg-green-600 text-white hover:bg-green-700 shadow-card-hover' 
+              : 'bg-forest-green text-white hover:bg-green-600 hover:shadow-card-hover'
           }`}
         >
           {audioPlaying ? (
@@ -413,7 +413,11 @@ export default function ResearchSummary() {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={toggleReadAloud}
-                className="w-full flex items-center space-x-3 px-3 py-2 bg-pale-sage/50 rounded-lg hover:bg-pale-sage transition-colors"
+                className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors shadow-card ${
+                  audioPlaying 
+                    ? 'bg-green-600 text-white hover:bg-green-700 hover:shadow-card-hover' 
+                    : 'bg-forest-green text-white hover:bg-green-600 hover:shadow-card-hover'
+                }`}
               >
                 {audioPlaying ? (
                   <PauseIcon className="w-5 h-5" />
