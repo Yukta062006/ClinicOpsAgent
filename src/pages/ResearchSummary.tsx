@@ -210,9 +210,9 @@ export default function ResearchSummary() {
         transition={{ delay: 0.1 }}
         className="bg-white rounded-lg shadow-card hover:shadow-card-hover p-6 border border-pale-sage mb-8"
       >
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-3">
-            <BookOpenIcon className="w-6 h-6 text-pale-sage" />
+        <div className="flex items-start mb-4">
+          <BookOpenIcon className="w-6 h-6 text-pale-sage flex-shrink-0" />
+          <div className="flex items-center space-x-3 flex-1">
             <span className="font-bold text-forest-green">{currentArticle.journal}</span>
             <span className="text-sm text-text-secondary">• {currentArticle.year}</span>
           </div>
@@ -222,7 +222,7 @@ export default function ResearchSummary() {
             href={currentArticle.originalUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center space-x-2 text-pale-sage hover:text-forest-green transition-colors"
+            className="flex items-center space-x-2 text-pale-sage hover:text-forest-green transition-colors ml-4"
           >
             <ArrowTopRightOnSquareIcon className="w-5 h-5" />
             <span className="text-sm font-medium">View Original</span>
