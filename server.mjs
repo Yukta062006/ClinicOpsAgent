@@ -1,9 +1,9 @@
-const express = require('express');
-const cors = require('cors');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const Database = require('better-sqlite3');
-const { v4: uuidv4 } = require('uuid');
+import express from 'express';
+import cors from 'cors';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import Database from 'better-sqlite3';
+import { v4 as uuidv4 } from 'uuid';
 
 const app = express();
 const PORT = 3001;
@@ -378,7 +378,7 @@ app.post('/api/patients', authenticateToken, requireRole(['frontdesk']), async (
         name, email, phone, date_of_birth, gender, address,
         emergency_contact, blood_type, allergies, medical_history,
         insurance_provider, policy_number,
-        tempPassword // Note: In production, this should be sent via email, not returned
+        tempPassword
       } 
     });
   } catch (error) {
@@ -662,8 +662,7 @@ app.post('/api/queue/call-next', authenticateToken, requireRole(['doctor', 'fron
     res.json({ 
       success: true, 
       patient: updatedPatient,
-      sound: true, // Frontend should play sound
-      message: `Calling ${updatedPatient.patient_name} - Token ${updatedPatient.token}`
+      sound: true
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -743,7 +742,6 @@ app.get('/api/dashboard/stats', authenticateToken, (req, res) => {
     let stats = {};
     
     if (user.role === 'doctor') {
-      // Doctor stats
       const doctorStats = db.prepare(`
         SELECT 
           COUNT(*) as total_patients_today,
@@ -773,7 +771,6 @@ app.get('/api/dashboard/stats', authenticateToken, (req, res) => {
         in_progress: queueStats.in_progress || 0
       };
     } else if (user.role === 'patient') {
-      // Patient stats
       const patientStats = db.prepare(`
         SELECT 
           COUNT(*) as total_appointments,
@@ -797,7 +794,6 @@ app.get('/api/dashboard/stats', authenticateToken, (req, res) => {
         current_wait_status: currentQueue ? currentQueue.status : 'none'
       };
     } else {
-      // Front desk stats
       const frontDeskStats = db.prepare(`
         SELECT 
           (SELECT COUNT(*) FROM users WHERE role = 'patient') as total_patients,
@@ -821,7 +817,6 @@ app.get('/api/dashboard/stats', authenticateToken, (req, res) => {
 });
 
 // ============ PATIENT ENGAGEMENT MODULES ============
-// Saved articles
 app.get('/api/articles/saved', authenticateToken, (req, res) => {
   try {
     const savedArticles = db.prepare(`
@@ -841,11 +836,9 @@ app.post('/api/articles/save', authenticateToken, (req, res) => {
       .get(req.user.id, article_id);
     
     if (existing) {
-      // Unsave if already saved
       db.prepare('DELETE FROM saved_articles WHERE id = ?').run(existing.id);
       res.json({ success: true, saved: false });
     } else {
-      // Save
       const savedId = uuidv4();
       db.prepare(`
         INSERT INTO saved_articles (id, user_id, article_id, title, authors, journal, year, category)
@@ -858,7 +851,6 @@ app.post('/api/articles/save', authenticateToken, (req, res) => {
   }
 });
 
-// Game scores
 app.get('/api/games/scores', authenticateToken, (req, res) => {
   try {
     const { game_id } = req.query;
@@ -902,7 +894,6 @@ app.post('/api/games/save-score', authenticateToken, (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(scoreId, req.user.id, game_id, score, moves, time_taken);
     
-    // Update user points
     const pointsEarned = Math.floor(score / 10);
     if (pointsEarned > 0) {
       db.prepare(`
@@ -923,7 +914,6 @@ app.post('/api/games/save-score', authenticateToken, (req, res) => {
   }
 });
 
-// Learning progress
 app.get('/api/learning/progress', authenticateToken, (req, res) => {
   try {
     const progress = db.prepare(`
@@ -951,14 +941,12 @@ app.post('/api/learning/complete-lesson', authenticateToken, (req, res) => {
     `).get(req.user.id, lesson_id);
     
     if (existing) {
-      // Update existing progress
       db.prepare(`
         UPDATE learning_progress 
         SET score = ?, completed = TRUE, completed_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `).run(score, existing.id);
     } else {
-      // Create new progress
       const progressId = uuidv4();
       const pointsEarned = Math.floor(score / 5);
       
@@ -967,7 +955,6 @@ app.post('/api/learning/complete-lesson', authenticateToken, (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, TRUE, ?, CURRENT_TIMESTAMP)
       `).run(progressId, req.user.id, lesson_id, lesson_title, category, score, pointsEarned);
       
-      // Update user points
       if (pointsEarned > 0) {
         db.prepare(`
           UPDATE user_points 
