@@ -68,13 +68,6 @@ export default function DailyZipChallenge() {
     }
   }, [todayDate])
 
-  // Switch to game tab when puzzle is loaded
-  useEffect(() => {
-    if (currentPuzzle && activeTab === 'dashboard') {
-      setActiveTab('game')
-    }
-  }, [currentPuzzle, activeTab])
-
   // Generate a solvable puzzle
   const generatePuzzle = (day: number): Puzzle => {
     let gridSize = 4
@@ -223,8 +216,7 @@ export default function DailyZipChallenge() {
     setTimeElapsed(0)
     setHintMode(false)
     setGameStatus('playing')
-    
-    // Set puzzle first, then switch tab in useEffect
+    setActiveTab('game')
   }
 
   const getNodePosition = (x: number, y: number, gridSize: number) => {
