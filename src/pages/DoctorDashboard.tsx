@@ -6,26 +6,16 @@ import {
   CalendarIcon,
   DocumentTextIcon,
   ChatBubbleBottomCenterTextIcon,
-  RectangleStackIcon,
-  VideoCameraIcon
+  RectangleStackIcon
 } from '@heroicons/react/24/outline'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useData } from '../context/DataContext'
 
-interface Patient {
-  id: string
-  name: string
-  age: number
-  condition: string
-  lastVisit: string
-  status: 'pending' | 'in-consultation' | 'completed'
-}
-
 export default function DoctorDashboard() {
   const [activeTab, setActiveTab] = useState<'appointments' | 'patients'>('appointments')
-  const [currentConsultationPatient, setCurrentConsultationPatient] = useState<Patient | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [modalAction, setModalAction] = useState<'join' | 'start' | null>(null)
+  const [showNewPatientForm, setShowNewPatientForm] = useState(false)
   
   const { 
     appointments, 
@@ -35,7 +25,7 @@ export default function DoctorDashboard() {
     getNextInQueue
   } = useData()
 
-  // Get real data from context
+  // Get real data from context - use context Patient type directly
   const currentPatientInQueue = queue.find(q => q.status === 'in-progress')
   const waitingPatients = queue.filter(q => q.status === 'waiting')
   const nextInLine = queue.find(q => q.status === 'waiting')
@@ -50,19 +40,11 @@ export default function DoctorDashboard() {
     averageWaitTime: '25 min'
   }
 
-  const handleJoinConsultation = (patientId: string, patientName: string) => {
-    const queueItem = queue.find(q => q.patientId === patientId)
-    if (queueItem) {
-      updateQueueItem(queueItem.id, 'in-progress')
-    }
-    setCurrentConsultationPatient({
-      id: patientId,
-      name: patientName,
-      age: 30,
-      condition: 'Diabetes',
-      lastVisit: 'Today',
-      status: 'in-consultation'
-    })
+  const handleJoinConsultation = (queueId: string, patientName: string, patientId: string) => {
+    // Update queue status to in-progress
+    updateQueueItem(queueId, 'in-progress')
+    setShowModal(true)
+    setModalAction('join')
   }
 
   return (
@@ -84,7 +66,7 @@ export default function DoctorDashboard() {
           className="flex items-center space-x-2 px-4 py-2 bg-light-green text-forest-green rounded-lg cursor-pointer"
           onClick={() => {
             const next = getNextInQueue()
-            if (next) handleJoinConsultation(next.patientId, next.patientName)
+            if (next) handleJoinConsultation(next.id, next.patientName, next.patientId)
           }}
         >
           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
@@ -190,17 +172,23 @@ export default function DoctorDashboard() {
           <div className="p-6">
             {activeTab === 'appointments' && (
               <div className="space-y-4">
-                {appointmentList.map((appointment, index) => (
-                  <motion.div
-                    key={appointment.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.2 + index * 0.05 }}
-                    className="flex items-center justify-between p-4 bg-light-green rounded-lg hover:shadow-card transition-shadow cursor-pointer"
-                    onClick={() => {
-                      handleJoinConsultation(appointment.patientId, appointment.patientName)
-                    }}
-                  >
+                {appointmentList.map((appointment, index) => {
+                  // Find queue item for this patient appointment
+                  const queueItem = queue.find(q => q.patientId === appointment.patientId)
+                  
+                  return (
+                    <motion.div
+                      key={appointment.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.2 + index * 0.05 }}
+                      className="flex items-center justify-between p-4 bg-light-green rounded-lg hover:shadow-card transition-shadow cursor-pointer"
+                      onClick={() => {
+                        if (queueItem) {
+                          handleJoinConsultation(queueItem.id, appointment.patientName, appointment.patientId)
+                        }
+                      }}
+                    >
                     <div className="flex items-center space-x-4">
                       <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
                         appointment.status === 'completed' 
@@ -235,15 +223,20 @@ export default function DoctorDashboard() {
                       </span>
                     </div>
                   </motion.div>
-                ))}
+                  )
+                })}
               </div>
             )}
 
             {activeTab === 'patients' && (
               <div className="space-y-4">
-                {patientList.map((patient, index) => (
-                  <motion.div
-                    key={patient.id}
+                {patientList.map((patient, index) => {
+                  // Find queue item for this patient
+                  const queueItem = queue.find(q => q.patientId === patient.id)
+                  
+                  return (
+                    <motion.div
+                      key={patient.id}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.2 + index * 0.05 }}
@@ -271,7 +264,8 @@ export default function DoctorDashboard() {
                       </span>
                     </div>
                   </motion.div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
@@ -322,9 +316,10 @@ export default function DoctorDashboard() {
             <button 
               onClick={() => {
                 const next = getNextInQueue()
-                if (next) handleJoinConsultation(next.patientId, next.patientName)
+                if (next) handleJoinConsultation(next.id, next.patientName, next.patientId)
                 else if (waitingPatients.length > 0) {
-                  handleJoinConsultation(waitingPatients[0].id, waitingPatients[0].name)
+                  const queueItem = queue.find(q => q.patientId === waitingPatients[0].id)
+                  if (queueItem) handleJoinConsultation(queueItem.id, waitingPatients[0].name, waitingPatients[0].id)
                 }
               }}
               className={`mt-6 w-full py-3 rounded-lg font-bold transition-colors ${
@@ -358,7 +353,15 @@ export default function DoctorDashboard() {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   className="flex flex-col items-center justify-center p-3 bg-light-green rounded-lg hover:bg-pale-sage hover:text-white transition-colors"
-                  onClick={() => alert(`Action: ${item.label} - Feature not implemented in this demo`)}
+                  onClick={() => {
+                    if (item.action === 'new') setShowNewPatientForm(true)
+                    else if (item.action === 'prescription') alert('Opening prescription form...')
+                    else if (item.action === 'lab') alert('Opening lab orders...')
+                    else if (item.action === 'consult') {
+                      const next = getNextInQueue()
+                      if (next) handleJoinConsultation(next.id, next.patientName, next.patientId)
+                    }
+                  }}
                 >
                   <item.icon className="w-5 h-5 mb-2" />
                   <span className="text-sm font-medium">{item.label}</span>
@@ -386,7 +389,11 @@ export default function DoctorDashboard() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   className="flex items-center space-x-4 p-3 bg-light-green rounded-lg cursor-pointer"
-                  onClick={() => slot.type === 'work' && alert('Schedule item clicked - Feature not implemented')}
+                  onClick={() => {
+                    if (slot.type === 'work') {
+                      alert(`Opening: ${slot.title}`)
+                    }
+                  }}
                 >
                   <div className="text-sm font-bold text-pale-sage w-16">{slot.time}</div>
                   <div className="flex-1">
@@ -403,6 +410,35 @@ export default function DoctorDashboard() {
           </motion.div>
         </div>
       </div>
+
+      {/* New Patient Modal */}
+      {showNewPatientForm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-xl border border-pale-sage">
+            <div className="p-6 border-b border-light-green flex items-center justify-between">
+              <h2 className="text-xl font-serif font-bold text-forest-green">New Patient Registration</h2>
+              <button 
+                onClick={() => setShowNewPatientForm(false)}
+                className="w-8 h-8 bg-warm-cream rounded-full flex items-center justify-center hover:bg-gray-200"
+              >
+                <span className="text-xl font-bold text-gray-600">×</span>
+              </button>
+            </div>
+
+            <div className="p-6">
+              <p className="text-text-secondary mb-4">This feature would open the patient registration form.</p>
+              <div className="flex justify-end space-x-3">
+                <button 
+                  onClick={() => setShowNewPatientForm(false)}
+                  className="px-4 py-2 bg-warm-cream text-text-secondary rounded-lg hover:bg-gray-200"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal */}
       <AnimatePresence>

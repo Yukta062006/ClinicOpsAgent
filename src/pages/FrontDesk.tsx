@@ -37,7 +37,7 @@ interface Appointment {
 }
 
 export default function FrontDesk() {
-  const { patients, addPatient, appointments, updateAppointment } = useData()
+  const { patients, addPatient, appointments, updateAppointment, addToQueue } = useData()
   const [searchTerm, setSearchTerm] = useState('')
   const [showNewPatientForm, setShowNewPatientForm] = useState(false)
   const [showAppointmentForm, setShowAppointmentForm] = useState(false)
@@ -92,9 +92,24 @@ export default function FrontDesk() {
     }
 
     addPatient(patient)
+    
+    // Add patient to queue for immediate service
+    const queueItem = {
+      id: Date.now().toString(),
+      token: generateToken(),
+      patientId: patient.id,
+      patientName: patient.name,
+      arrivalTime: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      status: 'waiting' as const,
+      priority: 'normal' as const,
+      department: 'General Practice',
+      reason: 'New patient registration'
+    }
+    addToQueue(queueItem)
+    
     setNewPatient({ name: '', age: 0, gender: 'M', phone: '', email: '', address: '' })
     setShowNewPatientForm(false)
-    alert(`Patient ${patient.name} registered successfully!`)
+    alert(`Patient ${patient.name} registered successfully and added to queue!`)
   }
 
   // Handle appointment scheduling
@@ -121,6 +136,20 @@ export default function FrontDesk() {
     }
 
     // In a real app, we would add to appointments state
+    // Add patient to queue for the scheduled appointment
+    const queueItem = {
+      id: Date.now().toString(),
+      token: generateToken(),
+      patientId: patient.id,
+      patientName: patient.name,
+      arrivalTime: appointment.time!,
+      status: 'waiting' as const,
+      priority: 'normal' as const,
+      department: appointment.type || 'General Checkup',
+      reason: 'Scheduled appointment'
+    }
+    addToQueue(queueItem)
+    
     alert(`Appointment scheduled for ${patient.name} at ${appointment.time} with ${appointment.doctor}`)
     setShowAppointmentForm(false)
     setAppointment({ patientId: '', doctor: '', time: '', type: 'General Checkup', status: 'scheduled' })
@@ -139,7 +168,27 @@ export default function FrontDesk() {
       token: '#125',
       status: 'checked-in'
     }
-    alert(`QR Scanned:\n\nPatient: ${mockQRData.patientName}\nToken: ${mockQRData.token}\nStatus: ${mockQRData.status}`)
+    
+    // Add patient to queue if not already in queue
+    const existingPatient = patients.find(p => p.id === mockQRData.patientId)
+    if (existingPatient) {
+      const queueItem = {
+        id: Date.now().toString(),
+        token: generateToken(),
+        patientId: existingPatient.id,
+        patientName: existingPatient.name,
+        arrivalTime: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+        status: 'waiting' as const,
+        priority: 'normal' as const,
+        department: 'General Practice',
+        reason: 'QR Scan check-in'
+      }
+      addToQueue(queueItem)
+      alert(`Patient ${existingPatient.name} checked in and added to queue!`)
+    } else {
+      alert(`QR Scanned:\n\nPatient: ${mockQRData.patientName}\nToken: ${mockQRData.token}\nStatus: ${mockQRData.status}`)
+    }
+    
     setShowQRScanner(false)
   }
 

@@ -26,44 +26,21 @@ interface QueueItem {
 }
 
 export default function QueueManagement() {
-  const [queue, setQueue] = useState<QueueItem[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [filter, setFilter] = useState<'all' | 'waiting' | 'in-progress' | 'completed'>('all')
-  const [soundEnabled, setSoundEnabled] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
   const audioContextRef = useRef<AudioContext | null>(null)
   
   const { 
-    queue: contextQueue, 
+    queue, 
     updateQueueItem, 
     getNextInQueue,
-    soundEnabled: contextSoundEnabled,
-    toggleSound,
-    user
+    soundEnabled,
+    toggleSound
   } = useData()
 
-  // Load queue from backend
-  useEffect(() => {
-    const loadQueue = async () => {
-      const token = localStorage.getItem('clinicops_token')
-      if (token) {
-        const response = await apiQueue.getAll(token, { status: 'waiting' })
-        if (response.success && response.data) {
-          setQueue(response.data.queue.map((q: any) => ({
-            id: q.id,
-            token: q.token,
-            patientName: q.patient_name,
-            arrivalTime: q.arrival_time,
-            status: q.status as 'waiting' | 'called' | 'in-progress' | 'completed',
-            priority: q.priority as 'normal' | 'urgent',
-            department: q.department,
-            reason: q.reason || ''
-          })))
-        }
-      }
-    }
-    loadQueue()
-  }, [])
+  // Use context queue directly
+  const queueFromContext = queue
 
   // Initialize audio context
   useEffect(() => {
@@ -120,37 +97,17 @@ export default function QueueManagement() {
   }
 
   const updateStatus = async (id: string, newStatus: QueueItem['status']) => {
-    const token = localStorage.getItem('clinicops_token')
-    if (token) {
-      const response = await apiQueue.updateStatus(token, id, newStatus)
-      if (response.success && response.data) {
-        setQueue(prev => prev.map(item => 
-          item.id === id ? { ...item, status: newStatus } : item
-        ))
-      }
-    }
+    updateQueueItem(id, newStatus)
   }
 
   const callNextPatient = async () => {
-    const token = localStorage.getItem('clinicops_token')
-    if (!token) return
+    playBeep()
+    playAnnouncementSound()
     
-    setIsLoading(true)
-    const response = await apiQueue.callNext(token, user?.id)
-    
-    if (response.success && response.data) {
-      playBeep()
-      playAnnouncementSound()
-      
-      setQueue(prev => {
-        const calledPatient = prev.find(q => q.id === response.data.patient.id)
-        if (calledPatient) {
-          return prev.map(item => 
-            item.id === calledPatient.id ? { ...item, status: 'called' } : item
-          )
-        }
-        return prev
-      })
+    // Find next waiting patient and update their status
+    const nextPatient = getNextInQueue()
+    if (nextPatient) {
+      updateQueueItem(nextPatient.id, 'called')
     }
     
     setIsLoading(false)
@@ -164,7 +121,7 @@ export default function QueueManagement() {
     await updateStatus(id, newStatus)
   }
 
-  const filteredQueue = queue.filter(item => {
+  const filteredQueue = queueFromContext.filter(item => {
     const matchesSearch = item.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           item.token.includes(searchTerm)
     const matchesFilter = filter === 'all' || item.status === filter
@@ -172,9 +129,9 @@ export default function QueueManagement() {
   })
 
   const stats = {
-    totalWaiting: queue.filter(q => q.status === 'waiting').length,
-    totalCalled: queue.filter(q => q.status === 'called').length,
-    totalInProgress: queue.filter(q => q.status === 'in-progress').length,
+    totalWaiting: queueFromContext.filter(q => q.status === 'waiting').length,
+    totalCalled: queueFromContext.filter(q => q.status === 'called').length,
+    totalInProgress: queueFromContext.filter(q => q.status === 'in-progress').length,
     averageWaitTime: '25 min'
   }
 

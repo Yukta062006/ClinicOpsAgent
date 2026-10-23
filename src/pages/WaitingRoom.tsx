@@ -29,7 +29,7 @@ export default function WaitingRoom() {
   const [soundEnabled, setSoundEnabled] = useState(true)
   const audioContextRef = useRef<AudioContext | null>(null)
   
-  const { queue, soundEnabled: contextSoundEnabled, toggleSound } = useData()
+  const { queue, updateQueueItem, soundEnabled: contextSoundEnabled, toggleSound } = useData()
 
   // Initialize audio context
   useEffect(() => {
@@ -57,7 +57,19 @@ export default function WaitingRoom() {
     setSoundEnabled(contextSoundEnabled)
   }, [queue, contextSoundEnabled])
 
-  const playAnnouncement = (patientName: string, token: string) => {
+  // Call next patient
+  const callNextPatient = async () => {
+    playAnnouncementSound()
+    
+    // Find next waiting patient and update their status
+    const nextPatient = queue.find(q => q.status === 'waiting')
+    if (nextPatient) {
+      updateQueueItem(nextPatient.id, 'called')
+    }
+  }
+
+  // Play announcement sound
+  const playAnnouncementSound = () => {
     if (!soundEnabled || !audioContextRef.current) return
     
     try {
@@ -69,19 +81,11 @@ export default function WaitingRoom() {
       gainNode.connect(audioContext.destination)
       
       oscillator.frequency.value = 500
-      oscillator.type = 'triangle'
+      oscillator.type = 'sine'
       gainNode.gain.value = 0.2
       
       oscillator.start()
-      oscillator.stop(audioContext.currentTime + 1.0)
-      
-      // Also speak the announcement
-      if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(`Calling ${patientName}, token ${token}`)
-        utterance.rate = 0.9
-        utterance.pitch = 1.1
-        window.speechSynthesis.speak(utterance)
-      }
+      oscillator.stop(audioContext.currentTime + 0.5)
     } catch (error) {
       console.error('Error playing announcement:', error)
     }
@@ -243,8 +247,10 @@ export default function WaitingRoom() {
                   }`}
                   onClick={() => {
                     if (patient.priority === 'urgent') {
-                      playAnnouncement(patient.name, patient.token)
+                      playAnnouncementSound()
                       alert(`Urgent patient called: ${patient.name}`)
+                    } else {
+                      callNextPatient()
                     }
                   }}
                 >
