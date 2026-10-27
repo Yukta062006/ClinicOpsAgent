@@ -39,6 +39,9 @@ function initDatabase() {
     CREATE TABLE IF NOT EXISTS patients (
       id TEXT PRIMARY KEY,
       user_id TEXT UNIQUE REFERENCES users(id),
+      abha_id TEXT,
+      aadhaar TEXT,
+      pan TEXT,
       date_of_birth TEXT,
       gender TEXT,
       address TEXT,
@@ -52,6 +55,11 @@ function initDatabase() {
       status TEXT DEFAULT 'active'
     )
   `);
+
+  // Migrations for existing patients table
+  try { db.exec(`ALTER TABLE patients ADD COLUMN abha_id TEXT`); } catch (e) {}
+  try { db.exec(`ALTER TABLE patients ADD COLUMN aadhaar TEXT`); } catch (e) {}
+  try { db.exec(`ALTER TABLE patients ADD COLUMN pan TEXT`); } catch (e) {}
 
   // Appointments table
   db.exec(`
@@ -87,6 +95,24 @@ function initDatabase() {
       started_time DATETIME,
       completed_time DATETIME,
       estimated_wait INTEGER
+    )
+  `);
+
+  // Consultations table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS consultations (
+      id TEXT PRIMARY KEY,
+      appointment_id TEXT,
+      patient_id TEXT NOT NULL,
+      doctor_id TEXT NOT NULL,
+      chief_complaint TEXT,
+      diagnosis TEXT,
+      observations TEXT,
+      prescription TEXT,
+      vitals TEXT,
+      notes TEXT,
+      follow_up_date TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
@@ -147,16 +173,71 @@ function initDatabase() {
     )
   `);
 
-  // Default admin user
-  const adminExists = db.prepare('SELECT * FROM users WHERE email = ?').get('admin@clinicops.com');
-  if (!adminExists) {
-    const hashedPassword = bcrypt.hashSync('admin123', 10);
-    const adminId = uuidv4();
-    db.prepare(`
-      INSERT INTO users (id, email, password, name, role, specialty) 
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(adminId, 'admin@clinicops.com', hashedPassword, 'Admin User', 'doctor', 'Administration');
+  // Seed default Indian users if missing
+  const defaultPassword = bcrypt.hashSync('admin123', 10);
+  
+  const seedUsers = [
+    { id: 'u-admin', email: 'admin@clinicops.com', name: 'Admin User', role: 'doctor', specialty: 'Administration', department: 'Management' },
+    { id: 'u-yukta', email: 'yukta@clinicops.com', name: 'Yukta Ravindra Thakur', role: 'patient', phone: '+91 98201 45892' },
+    { id: 'u-patient', email: 'patient@clinicops.com', name: 'Yukta Ravindra Thakur', role: 'patient', phone: '+91 98201 45892' },
+    { id: 'u-frontdesk', email: 'frontdesk@clinicops.com', name: 'Olivia Martin', role: 'frontdesk', phone: '+91 98211 22334', department: 'Reception' },
+    { id: 'u-cooper', email: 'doctor@clinicops.com', name: 'Dr. Elena Cooper', role: 'doctor', phone: '+91 98222 33445', specialty: 'Family Medicine', department: 'Room 02' },
+    { id: 'u-rajesh', email: 'rajesh.patil@clinicops.com', name: 'Dr. Rajesh Patil', role: 'doctor', phone: '+91 98233 44556', specialty: 'Cardiology', department: 'Room 04' },
+    { id: 'u-sarah', email: 'sarah.sharma@clinicops.com', name: 'Dr. Sarah Sharma', role: 'doctor', phone: '+91 98244 55667', specialty: 'General Medicine', department: 'Room 01' },
+    { id: 'u-amit', email: 'amit.deshmukh@clinicops.com', name: 'Dr. Amit Deshmukh', role: 'doctor', phone: '+91 98255 66778', specialty: 'Pediatrics', department: 'Room 02' },
+    { id: 'u-neha', email: 'neha.kulkarni@clinicops.com', name: 'Dr. Neha Kulkarni', role: 'doctor', phone: '+91 98266 77889', specialty: 'Specialist Consultation', department: 'Room 03' },
+  ];
+
+  for (const u of seedUsers) {
+    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(u.email);
+    if (!existing) {
+      db.prepare(`
+        INSERT INTO users (id, email, password, name, role, phone, specialty, department)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(u.id, u.email, defaultPassword, u.name, u.role, u.phone || null, u.specialty || null, u.department || null);
+
+      if (u.role === 'patient') {
+        const patientId = `p-${u.id}`;
+        try {
+          db.prepare(`
+            INSERT INTO patients (id, user_id, abha_id, aadhaar, pan, date_of_birth, gender, blood_type, address, emergency_contact)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(patientId, u.id, '91-4821-7290-3412', 'XXXX-XXXX-4912', 'AAAPT4912K', '1998-07-14', 'Female', 'O+', '123 Marine Drive, Mumbai 400020', '+91 98201 99887');
+          
+          db.prepare(`INSERT INTO user_points (id, user_id, total_points, streak_days) VALUES (?, ?, ?, ?)`).run(uuidv4(), u.id, 840, 5);
+        } catch(e) {}
+      }
+    }
   }
+}
+
+// Sequential token generator helper (strictly sequential, department prefix)
+function generateNextToken(department = 'General Medicine') {
+  const rows = db.prepare(`SELECT token FROM queue`).all();
+  let max = 0;
+  for (const r of rows) {
+    if (r.token) {
+      const match = r.token.match(/(\d+)/);
+      if (match) {
+        const n = parseInt(match[1], 10);
+        if (n > max) max = n;
+      }
+    }
+  }
+  const nextNum = max + 1;
+  const padded = String(nextNum).padStart(3, '0');
+  let prefix = 'GM-';
+  const deptLower = (department || '').toLowerCase();
+  if (deptLower.includes('room 02') || deptLower.includes('cooper') || deptLower.includes('family')) prefix = 'A-';
+  else if (deptLower.includes('room 03') || deptLower.includes('kim')) prefix = 'B-';
+  else if (deptLower.includes('cardio') || deptLower.includes('patil')) prefix = 'CD-';
+  else if (deptLower.includes('pediatric') || deptLower.includes('deshmukh')) prefix = 'PD-';
+  
+  return {
+    number: nextNum,
+    token: `${prefix}${padded}`,
+    tokenPadded: padded
+  };
 }
 
 // Initialize database
@@ -189,15 +270,38 @@ function requireRole(roles) {
 // ============ AUTHENTICATION ROUTES ============
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { email, password, name, role, phone, specialty, department } = req.body;
+    const { 
+      email, 
+      password, 
+      name, 
+      role, 
+      phone, 
+      specialty, 
+      department,
+      date_of_birth,
+      gender,
+      address,
+      emergency_contact,
+      blood_type,
+      abha_id,
+      aadhaar,
+      pan
+    } = req.body;
     
     if (!email || !password || !name || !role) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      return res.status(400).json({ error: 'Missing required fields (name, email, password, role)' });
     }
     
-    const existingUser = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    const existingUser = db.prepare('SELECT * FROM users WHERE email = ?').get(email.trim().toLowerCase());
     if (existingUser) {
-      return res.status(400).json({ error: 'Email already registered' });
+      return res.status(400).json({ error: 'An account with this email address already exists' });
+    }
+
+    if (abha_id) {
+      const existingAbha = db.prepare('SELECT id FROM patients WHERE abha_id = ?').get(abha_id.trim());
+      if (existingAbha) {
+        return res.status(400).json({ error: 'An account with this ABHA number is already registered' });
+      }
     }
     
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -206,23 +310,38 @@ app.post('/api/auth/register', async (req, res) => {
     db.prepare(`
       INSERT INTO users (id, email, password, name, role, phone, specialty, department)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(userId, email, hashedPassword, name, role, phone, specialty, department);
+    `).run(userId, email.trim().toLowerCase(), hashedPassword, name.trim(), role, phone || null, specialty || null, department || null);
     
     // Create patient record if role is patient
     if (role === 'patient') {
       const patientId = uuidv4();
       db.prepare(`
-        INSERT INTO patients (id, user_id) VALUES (?, ?)
-      `).run(patientId, userId);
+        INSERT INTO patients (
+          id, user_id, date_of_birth, gender, address, emergency_contact,
+          blood_type, abha_id, aadhaar, pan, insurance_provider
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        patientId, 
+        userId, 
+        date_of_birth || null, 
+        gender || 'Other', 
+        address || null, 
+        emergency_contact || null,
+        blood_type || null, 
+        abha_id || null, 
+        aadhaar || null, 
+        pan || null,
+        'Ayushman Bharat / ABHA'
+      );
       
-      // Initialize user points
+      // Initialize user points and streak
       db.prepare(`
-        INSERT INTO user_points (id, user_id) VALUES (?, ?)
+        INSERT INTO user_points (id, user_id, total_points, streak_days) VALUES (?, ?, 840, 5)
       `).run(uuidv4(), userId);
     }
     
     const token = jwt.sign(
-      { id: userId, email, name, role },
+      { id: userId, email: email.trim().toLowerCase(), name: name.trim(), role },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -230,7 +349,20 @@ app.post('/api/auth/register', async (req, res) => {
     res.json({ 
       success: true, 
       token, 
-      user: { id: userId, email, name, role, phone, specialty, department } 
+      user: { 
+        id: userId, 
+        email: email.trim().toLowerCase(), 
+        name: name.trim(), 
+        role, 
+        phone: phone || null, 
+        specialty: specialty || null, 
+        department: department || null,
+        abhaId: abha_id || null,
+        dateOfBirth: date_of_birth || null,
+        gender: gender || 'Other',
+        address: address || null,
+        emergencyContact: emergency_contact || null
+      } 
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -239,16 +371,40 @@ app.post('/api/auth/register', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, abha_id } = req.body;
     
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    if (!password) {
+      return res.status(400).json({ error: 'Password is required' });
+    }
+
+    let user;
+    if (abha_id) {
+      const clean = abha_id.trim();
+      const digitsOnly = clean.replace(/[^0-9]/g, '');
+      user = db.prepare(`
+        SELECT u.*, p.abha_id, p.aadhaar, p.pan, p.date_of_birth, p.gender, p.address, p.emergency_contact
+        FROM users u
+        JOIN patients p ON u.id = p.user_id
+        WHERE p.abha_id = ? OR REPLACE(p.abha_id, '-', '') = ? OR REPLACE(p.abha_id, ' ', '') = ?
+      `).get(clean, digitsOnly, digitsOnly);
+    } else if (email) {
+      user = db.prepare(`
+        SELECT u.*, p.abha_id, p.aadhaar, p.pan, p.date_of_birth, p.gender, p.address, p.emergency_contact
+        FROM users u
+        LEFT JOIN patients p ON u.id = p.user_id
+        WHERE LOWER(u.email) = ?
+      `).get(email.trim().toLowerCase());
+    } else {
+      return res.status(400).json({ error: 'Please provide either an email or an ABHA number' });
+    }
+    
     if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Invalid credentials. User not found.' });
     }
     
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Invalid credentials. Incorrect password.' });
     }
     
     const token = jwt.sign(
@@ -267,8 +423,58 @@ app.post('/api/auth/login', async (req, res) => {
         role: user.role,
         phone: user.phone,
         specialty: user.specialty,
-        department: user.department
+        department: user.department,
+        abhaId: user.abha_id || null,
+        aadhaar: user.aadhaar ? `XXXX-XXXX-${user.aadhaar.slice(-4)}` : null,
+        pan: user.pan || null,
+        dateOfBirth: user.date_of_birth || null,
+        gender: user.gender || null,
+        address: user.address || null,
+        emergencyContact: user.emergency_contact || null
       } 
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { identifier, new_password, is_abha } = req.body;
+
+    if (!identifier || !new_password) {
+      return res.status(400).json({ error: 'Identifier and new password are required' });
+    }
+
+    if (new_password.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+
+    let user;
+    if (is_abha) {
+      const clean = identifier.trim();
+      const digitsOnly = clean.replace(/[^0-9]/g, '');
+      user = db.prepare(`
+        SELECT u.id, u.email, u.name
+        FROM users u
+        JOIN patients p ON u.id = p.user_id
+        WHERE p.abha_id = ? OR REPLACE(p.abha_id, '-', '') = ? OR REPLACE(p.abha_id, ' ', '') = ?
+      `).get(clean, digitsOnly, digitsOnly);
+    } else {
+      user = db.prepare('SELECT id, email, name FROM users WHERE LOWER(email) = ?').get(identifier.trim().toLowerCase());
+    }
+
+    if (!user) {
+      return res.status(404).json({ error: 'No registered account found with these details' });
+    }
+
+    const hashedPassword = await bcrypt.hash(new_password, 10);
+    db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashedPassword, user.id);
+
+    res.json({
+      success: true,
+      message: `Password reset successfully for ${user.name}. You may now log in.`,
+      email: user.email
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -277,8 +483,28 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/auth/me', authenticateToken, (req, res) => {
   try {
-    const user = db.prepare('SELECT id, email, name, role, phone, specialty, department FROM users WHERE id = ?').get(req.user.id);
-    res.json({ success: true, user });
+    const user = db.prepare(`
+      SELECT u.id, u.email, u.name, u.role, u.phone, u.specialty, u.department,
+             p.abha_id, p.aadhaar, p.pan, p.date_of_birth, p.gender, p.address, p.emergency_contact
+      FROM users u
+      LEFT JOIN patients p ON u.id = p.user_id
+      WHERE u.id = ?
+    `).get(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ 
+      success: true, 
+      user: {
+        ...user,
+        abhaId: user.abha_id,
+        aadhaar: user.aadhaar ? `XXXX-XXXX-${user.aadhaar.slice(-4)}` : null,
+        dateOfBirth: user.date_of_birth,
+        emergencyContact: user.emergency_contact
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -294,7 +520,8 @@ app.get('/api/patients', authenticateToken, requireRole(['frontdesk', 'doctor'])
     let query = `
       SELECT u.id, u.name, u.email, u.phone, u.role, 
              p.date_of_birth, p.gender, p.address, p.emergency_contact,
-             p.blood_type, p.allergies, p.registration_date
+             p.blood_type, p.allergies, p.registration_date,
+             p.abha_id, p.aadhaar, p.pan
       FROM users u
       LEFT JOIN patients p ON u.id = p.user_id
       WHERE u.role = 'patient'
@@ -303,9 +530,9 @@ app.get('/api/patients', authenticateToken, requireRole(['frontdesk', 'doctor'])
     const params = [];
     
     if (search) {
-      query += ` AND (u.name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)`;
+      query += ` AND (u.name LIKE ? OR u.email LIKE ? OR u.phone LIKE ? OR p.abha_id LIKE ?)`;
       const searchParam = `%${search}%`;
-      params.push(searchParam, searchParam, searchParam);
+      params.push(searchParam, searchParam, searchParam, searchParam);
     }
     
     query += ` LIMIT ? OFFSET ?`;
@@ -314,12 +541,12 @@ app.get('/api/patients', authenticateToken, requireRole(['frontdesk', 'doctor'])
     const patients = db.prepare(query).all(...params);
     
     // Get total count
-    let countQuery = `SELECT COUNT(*) as total FROM users WHERE role = 'patient'`;
+    let countQuery = `SELECT COUNT(*) as total FROM users u LEFT JOIN patients p ON u.id = p.user_id WHERE u.role = 'patient'`;
     if (search) {
-      countQuery += ` AND (name LIKE ? OR email LIKE ? OR phone LIKE ?)`;
+      countQuery += ` AND (u.name LIKE ? OR u.email LIKE ? OR u.phone LIKE ? OR p.abha_id LIKE ?)`;
     }
     
-    const countParams = search ? [`%${search}%`, `%${search}%`, `%${search}%`] : [];
+    const countParams = search ? [`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`] : [];
     const countResult = db.prepare(countQuery).get(...countParams);
     
     res.json({ 
@@ -332,38 +559,49 @@ app.get('/api/patients', authenticateToken, requireRole(['frontdesk', 'doctor'])
   }
 });
 
-app.post('/api/patients', authenticateToken, requireRole(['frontdesk']), async (req, res) => {
+app.post('/api/patients', authenticateToken, requireRole(['frontdesk', 'doctor']), async (req, res) => {
   try {
     const { 
       name, email, phone, date_of_birth, gender, address, 
       emergency_contact, blood_type, allergies, medical_history,
-      insurance_provider, policy_number 
+      insurance_provider, policy_number,
+      abha_id, aadhaar, pan
     } = req.body;
     
-    if (!name || !email || !phone) {
-      return res.status(400).json({ error: 'Name, email, and phone are required' });
+    if (!name || !phone) {
+      return res.status(400).json({ error: 'Name and phone are required' });
+    }
+    
+    const patientEmail = email || `${name.toLowerCase().replace(/[^a-z0-9]/g, '')}_${Date.now().toString().slice(-4)}@clinicops.com`;
+    
+    // Check if email already exists
+    const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(patientEmail);
+    if (existingUser) {
+      return res.status(400).json({ error: 'Email already exists. Please use a unique email or leave blank to auto-generate.' });
     }
     
     // Create user record
     const userId = uuidv4();
-    const tempPassword = Math.random().toString(36).slice(-8);
+    const tempPassword = 'patient123';
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
     
     db.prepare(`
       INSERT INTO users (id, email, password, name, role, phone)
       VALUES (?, ?, ?, ?, 'patient', ?)
-    `).run(userId, email, hashedPassword, name, phone);
+    `).run(userId, patientEmail, hashedPassword, name, phone);
     
     // Create patient record
     const patientId = uuidv4();
     db.prepare(`
       INSERT INTO patients (
         id, user_id, date_of_birth, gender, address, emergency_contact,
-        blood_type, allergies, medical_history, insurance_provider, policy_number
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        blood_type, allergies, medical_history, insurance_provider, policy_number,
+        abha_id, aadhaar, pan
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      patientId, userId, date_of_birth, gender, address, emergency_contact,
-      blood_type, allergies, medical_history, insurance_provider, policy_number
+      patientId, userId, date_of_birth || null, gender || 'Other', address || null, emergency_contact || null,
+      blood_type || null, allergies || null, medical_history || null, insurance_provider || 'ABHA / PMJAY', policy_number || null,
+      abha_id || null, aadhaar || null, pan || null
     );
     
     // Initialize user points
@@ -375,9 +613,10 @@ app.post('/api/patients', authenticateToken, requireRole(['frontdesk']), async (
       success: true, 
       patient: { 
         id: userId, 
-        name, email, phone, date_of_birth, gender, address,
+        name, email: patientEmail, phone, date_of_birth, gender, address,
         emergency_contact, blood_type, allergies, medical_history,
         insurance_provider, policy_number,
+        abha_id, aadhaar, pan,
         tempPassword
       } 
     });
@@ -457,17 +696,10 @@ app.post('/api/appointments', authenticateToken, requireRole(['frontdesk', 'pati
       return res.status(403).json({ error: 'Patients can only schedule appointments for themselves' });
     }
     
-    // Generate token number if not provided
-    let finalTokenNumber = token_number;
-    if (!finalTokenNumber) {
-      const lastAppointment = db.prepare(`
-        SELECT token_number FROM appointments 
-        WHERE appointment_date = ? AND doctor_id = ?
-        ORDER BY token_number DESC LIMIT 1
-      `).get(appointment_date, doctor_id);
-      
-      finalTokenNumber = lastAppointment ? lastAppointment.token_number + 1 : 1;
-    }
+    // Generate sequential token number
+    const tokenInfo = generateNextToken(type || 'General Medicine');
+    const finalTokenNumber = token_number || tokenInfo.number;
+    const finalTokenStr = tokenInfo.token;
     
     const appointmentId = uuidv4();
     db.prepare(`
@@ -480,8 +712,8 @@ app.post('/api/appointments', authenticateToken, requireRole(['frontdesk', 'pati
       const queueId = uuidv4();
       db.prepare(`
         INSERT INTO queue (id, appointment_id, token, patient_id, doctor_id, department, status)
-        VALUES (?, ?, ?, ?, ?, 'General Practice', 'waiting')
-      `).run(queueId, appointmentId, `#${finalTokenNumber}`, patient_id, doctor_id);
+        VALUES (?, ?, ?, ?, ?, ?, 'waiting')
+      `).run(queueId, appointmentId, finalTokenStr, patient_id, doctor_id, type || 'General Practice');
     }
     
     const newAppointment = db.prepare(`
@@ -492,7 +724,130 @@ app.post('/api/appointments', authenticateToken, requireRole(['frontdesk', 'pati
       WHERE a.id = ?
     `).get(appointmentId);
     
-    res.json({ success: true, appointment: newAppointment });
+    res.json({ success: true, appointment: newAppointment, token: finalTokenStr });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Reschedule appointment
+app.put('/api/appointments/:id/reschedule', authenticateToken, (req, res) => {
+  try {
+    const { id } = req.params;
+    const { appointment_date, appointment_time, notes } = req.body;
+    
+    const appt = db.prepare('SELECT * FROM appointments WHERE id = ?').get(id);
+    if (!appt) return res.status(404).json({ error: 'Appointment not found' });
+    
+    db.prepare(`
+      UPDATE appointments 
+      SET appointment_date = ?, appointment_time = ?, status = 'scheduled', notes = COALESCE(?, notes)
+      WHERE id = ?
+    `).run(appointment_date, appointment_time, notes || null, id);
+    
+    const updated = db.prepare(`
+      SELECT a.*, p.name as patient_name, d.name as doctor_name
+      FROM appointments a
+      JOIN users p ON a.patient_id = p.id
+      JOIN users d ON a.doctor_id = d.id
+      WHERE a.id = ?
+    `).get(id);
+    
+    res.json({ success: true, appointment: updated });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Cancel appointment
+app.put('/api/appointments/:id/cancel', authenticateToken, (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    
+    const appt = db.prepare('SELECT * FROM appointments WHERE id = ?').get(id);
+    if (!appt) return res.status(404).json({ error: 'Appointment not found' });
+    
+    db.prepare(`UPDATE appointments SET status = 'cancelled', notes = COALESCE(?, notes) WHERE id = ?`).run(reason || 'Cancelled by user', id);
+    db.prepare(`UPDATE queue SET status = 'cancelled' WHERE appointment_id = ?`).run(id);
+    
+    res.json({ success: true, message: 'Appointment cancelled successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Check-in route to generate sequential token and enter queue
+app.post('/api/queue/check-in', authenticateToken, (req, res) => {
+  try {
+    const { patient_id, doctor_id, appointment_id, department } = req.body;
+    
+    // Check if patient already has active queue token
+    const active = db.prepare(`SELECT * FROM queue WHERE patient_id = ? AND status IN ('waiting', 'called', 'in-progress')`).get(patient_id);
+    if (active) {
+      return res.json({ success: true, queueItem: active, message: 'Patient already has an active token in queue' });
+    }
+    
+    const tokenInfo = generateNextToken(department || 'General Practice');
+    const queueId = uuidv4();
+    
+    db.prepare(`
+      INSERT INTO queue (id, appointment_id, token, patient_id, doctor_id, department, status, priority, estimated_wait)
+      VALUES (?, ?, ?, ?, ?, ?, 'waiting', 'normal', 15)
+    `).run(queueId, appointment_id || null, tokenInfo.token, patient_id, doctor_id || null, department || 'General Practice');
+    
+    if (appointment_id) {
+      db.prepare(`UPDATE appointments SET checked_in = TRUE, status = 'checked-in' WHERE id = ?`).run(appointment_id);
+    }
+    
+    const queueItem = db.prepare(`
+      SELECT q.*, p.name as patient_name, p.phone as patient_phone, d.name as doctor_name
+      FROM queue q
+      JOIN users p ON q.patient_id = p.id
+      LEFT JOIN users d ON q.doctor_id = d.id
+      WHERE q.id = ?
+    `).get(queueId);
+    
+    res.json({ success: true, queueItem, token: tokenInfo.token });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Doctor consultation routes
+app.post('/api/consultations', authenticateToken, requireRole(['doctor']), (req, res) => {
+  try {
+    const { appointment_id, patient_id, diagnosis, observations, prescription, vitals, notes, follow_up_date } = req.body;
+    const doctor_id = req.user.id;
+    const consultationId = uuidv4();
+    
+    db.prepare(`
+      INSERT INTO consultations (id, appointment_id, patient_id, doctor_id, diagnosis, observations, prescription, vitals, notes, follow_up_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(consultationId, appointment_id || null, patient_id, doctor_id, diagnosis || '', observations || '', prescription || '', vitals || '', notes || '', follow_up_date || null);
+    
+    if (appointment_id) {
+      db.prepare(`UPDATE appointments SET status = 'completed', notes = ? WHERE id = ?`).run(diagnosis || 'Consultation completed', appointment_id);
+      db.prepare(`UPDATE queue SET status = 'completed', completed_time = CURRENT_TIMESTAMP WHERE appointment_id = ?`).run(appointment_id);
+    }
+    
+    res.json({ success: true, consultationId });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/consultations/patient/:patientId', authenticateToken, (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const consultations = db.prepare(`
+      SELECT c.*, d.name as doctor_name, d.specialty as doctor_specialty
+      FROM consultations c
+      JOIN users d ON c.doctor_id = d.id
+      WHERE c.patient_id = ?
+      ORDER BY c.created_at DESC
+    `).all(patientId);
+    res.json({ success: true, consultations });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -34,11 +34,12 @@ function getAuthHeaders(token?: string) {
 
 // Auth API
 export const apiAuth = {
-  login: async (email: string, password: string): Promise<ApiResponse<{ token: string; user: any }>> => {
+  login: async (identifier: string, password: string, isAbha: boolean = false): Promise<ApiResponse<{ token: string; user: any }>> => {
+    const payload = isAbha ? { abha_id: identifier, password } : { email: identifier, password };
     const response = await fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(payload),
     });
     return handleResponse(response);
   },
@@ -51,6 +52,14 @@ export const apiAuth = {
     phone?: string;
     specialty?: string;
     department?: string;
+    date_of_birth?: string;
+    gender?: string;
+    address?: string;
+    emergency_contact?: string;
+    blood_type?: string;
+    abha_id?: string;
+    aadhaar?: string;
+    pan?: string;
   }): Promise<ApiResponse<{ token: string; user: any }>> => {
     const response = await fetch(`${API_BASE_URL}/auth/register`, {
       method: 'POST',
@@ -63,6 +72,15 @@ export const apiAuth = {
   me: async (token: string): Promise<ApiResponse<{ user: any }>> => {
     const response = await fetch(`${API_BASE_URL}/auth/me`, {
       headers: getAuthHeaders(token),
+    });
+    return handleResponse(response);
+  },
+
+  resetPassword: async (identifier: string, newPassword: string, isAbha: boolean = false): Promise<ApiResponse<{ message: string; email: string }>> => {
+    const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier, new_password: newPassword, is_abha: isAbha }),
     });
     return handleResponse(response);
   },
@@ -103,7 +121,7 @@ export const apiAppointments = {
     return handleResponse(response);
   },
   
-  create: async (token: string, data: any): Promise<ApiResponse<{ appointment: any }>> => {
+  create: async (token: string, data: any): Promise<ApiResponse<{ appointment: any; token?: string }>> => {
     const response = await fetch(`${API_BASE_URL}/appointments`, {
       method: 'POST',
       headers: getAuthHeaders(token),
@@ -117,6 +135,24 @@ export const apiAppointments = {
       method: 'PUT',
       headers: getAuthHeaders(token),
       body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  reschedule: async (token: string, id: string, data: { appointment_date: string; appointment_time: string; notes?: string }): Promise<ApiResponse<{ appointment: any }>> => {
+    const response = await fetch(`${API_BASE_URL}/appointments/${id}/reschedule`, {
+      method: 'PUT',
+      headers: getAuthHeaders(token),
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  cancel: async (token: string, id: string, reason?: string): Promise<ApiResponse<{ message: string }>> => {
+    const response = await fetch(`${API_BASE_URL}/appointments/${id}/cancel`, {
+      method: 'PUT',
+      headers: getAuthHeaders(token),
+      body: JSON.stringify({ reason }),
     });
     return handleResponse(response);
   },
@@ -150,6 +186,34 @@ export const apiQueue = {
       method: 'PUT',
       headers: getAuthHeaders(token),
       body: JSON.stringify({ status }),
+    });
+    return handleResponse(response);
+  },
+
+  checkIn: async (token: string, data: { patient_id: string; doctor_id?: string; appointment_id?: string; department?: string }): Promise<ApiResponse<{ queueItem: any; token: string }>> => {
+    const response = await fetch(`${API_BASE_URL}/queue/check-in`, {
+      method: 'POST',
+      headers: getAuthHeaders(token),
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+};
+
+// Consultations API
+export const apiConsultations = {
+  create: async (token: string, data: any): Promise<ApiResponse<{ consultationId: string }>> => {
+    const response = await fetch(`${API_BASE_URL}/consultations`, {
+      method: 'POST',
+      headers: getAuthHeaders(token),
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  getByPatient: async (token: string, patientId: string): Promise<ApiResponse<{ consultations: any[] }>> => {
+    const response = await fetch(`${API_BASE_URL}/consultations/patient/${patientId}`, {
+      headers: getAuthHeaders(token),
     });
     return handleResponse(response);
   },

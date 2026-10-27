@@ -47,9 +47,7 @@ export default function DailyZipChallenge() {
   const { 
     userStreak,
     userPoints,
-    completeLesson,
-    setUserStreak,
-    setUserPoints
+    completeLesson
   } = useData()
 
   const [currentStreak, setCurrentStreak] = useState(userStreak)
@@ -112,7 +110,9 @@ export default function DailyZipChallenge() {
         
         for (let j = directions.length - 1; j > 0; j--) {
           const k = Math.floor(Math.random() * (j + 1))
-          [directions[j], directions[k]] = [directions[k], directions[j]]
+          const temp = directions[j]
+          directions[j] = directions[k]
+          directions[k] = temp
         }
         
         for (const dir of directions) {
@@ -261,10 +261,7 @@ export default function DailyZipChallenge() {
     localStorage.setItem('clinicops_zip_daily_completed', todayDate)
     setStreakCompleted(true)
     setCurrentStreak(newStreak)
-    setUserStreak(newStreak)
     
-    const pointsEarned = Math.round(score / 5)
-    setUserPoints(userPoints + pointsEarned)
     completeLesson('zip-challenge', score)
     
     setShowCompletion(true)
@@ -366,8 +363,14 @@ export default function DailyZipChallenge() {
                 <p className="text-text-secondary mb-4">Connect numbered points in sequence to complete the path</p>
               </div>
               <div className="text-center">
-                <div className="text-4xl font-bold text-forest-green mb-1">
-                  {streakCompleted ? '✅' : `Day ${currentStreak + 1}`}
+                <div className="text-3xl font-bold text-forest-green mb-1 flex items-center justify-center gap-1.5">
+                  {streakCompleted ? (
+                    <span className="text-emerald-700 flex items-center gap-1 text-2xl font-serif">
+                      <CheckCircleIcon className="w-6 h-6" /> Completed
+                    </span>
+                  ) : (
+                    `Day ${currentStreak + 1}`
+                  )}
                 </div>
                 <div className="text-sm text-text-secondary">Daily Challenge</div>
               </div>
@@ -491,14 +494,14 @@ export default function DailyZipChallenge() {
                 onClick={restartGame}
                 className="p-2 bg-pale-sage text-forest-green rounded-lg hover:bg-pale-sage/80"
               >
-                <RefreshIcon className="w-5 h-5" />
+                <ArrowPathIcon className="w-5 h-5" />
               </button>
               <button
                 onClick={undoMove}
                 className={`p-2 rounded-lg hover:bg-pale-sage/80 ${pathPoints.length === 0 ? 'opacity-50 cursor-not-allowed' : 'text-forest-green'}`}
                 disabled={pathPoints.length === 0 || gameStatus !== 'playing'}
               >
-                <UndoIcon className="w-5 h-5" />
+                <ArrowsRightLeftIcon className="w-5 h-5" />
               </button>
               <button
                 onClick={() => setHintMode(true)}
@@ -641,7 +644,9 @@ export default function DailyZipChallenge() {
             animate={{ opacity: 1, scale: 1 }}
             className="bg-white rounded-xl max-w-md w-full shadow-2xl p-8 text-center"
           >
-            <div className="text-6xl mb-4">🎉</div>
+            <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center justify-center mx-auto mb-4">
+              <TrophyIcon className="w-8 h-8" />
+            </div>
             <h2 className="text-3xl font-serif font-bold mb-2 text-forest-green">Challenge Complete!</h2>
             <p className="text-text-secondary mb-6">You've successfully completed today's daily challenge.</p>
             

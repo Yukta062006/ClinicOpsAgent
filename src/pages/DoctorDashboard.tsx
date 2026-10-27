@@ -1,500 +1,818 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { 
   UserIcon, 
   ClockIcon, 
-  CheckBadgeIcon, 
   CalendarIcon,
   DocumentTextIcon,
-  ChatBubbleBottomCenterTextIcon,
-  RectangleStackIcon
+  CheckIcon,
+  XMarkIcon,
+  ChatBubbleLeftRightIcon,
+  HeartIcon,
+  ClipboardDocumentCheckIcon,
+  SparklesIcon,
+  ArrowRightIcon,
+  CheckCircleIcon
 } from '@heroicons/react/24/outline'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useData } from '../context/DataContext'
 
 export default function DoctorDashboard() {
-  const [activeTab, setActiveTab] = useState<'appointments' | 'patients'>('appointments')
-  const [showModal, setShowModal] = useState(false)
-  const [modalAction, setModalAction] = useState<'join' | 'start' | null>(null)
-  const [showNewPatientForm, setShowNewPatientForm] = useState(false)
-  
+  const location = useLocation()
   const { 
     appointments, 
     patients, 
     queue,
-    updateQueueItem,
-    getNextInQueue
+    user,
+    startConsultation,
+    completeConsultation,
+    callNextPatient
   } = useData()
 
-  // Get real data from context - use context Patient type directly
-  const currentPatientInQueue = queue.find(q => q.status === 'in-progress')
-  const waitingPatients = queue.filter(q => q.status === 'waiting')
-  const nextInLine = queue.find(q => q.status === 'waiting')
+  const [activeTab, setActiveTab] = useState<'morning' | 'afternoon' | 'completed'>('morning')
+  const [showConsultationModal, setShowConsultationModal] = useState(false)
+  const [showRecordModal, setShowRecordModal] = useState<any | null>(null)
+  const [showIntakeModal, setShowIntakeModal] = useState<any | null>(null)
+  const [showReceptionModal, setShowReceptionModal] = useState(false)
+  const [receptionMsg, setReceptionMsg] = useState('')
+  const [toastMsg, setToastMsg] = useState<string | null>(null)
 
-  const appointmentList = appointments.slice(0, 4)
-  const patientList = patients.slice(0, 4)
+  // Handle URL query parameters from sidebar links
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const tabParam = params.get('tab')
+    const actionParam = params.get('action')
 
-  const stats = {
-    todayPatients: patientList.length,
-    completedConsultations: appointmentList.filter(a => a.status === 'completed').length,
-    pendingPatients: waitingPatients.length,
-    averageWaitTime: '25 min'
+    if (tabParam === 'morning' || tabParam === 'afternoon' || tabParam === 'completed') {
+      setActiveTab(tabParam)
+    } else if (tabParam === 'patients') {
+      setShowRecordModal(patients[0] || null)
+    }
+
+    if (actionParam === 'consult') {
+      setShowConsultationModal(true)
+    } else if (actionParam === 'history' || actionParam === 'notes') {
+      setShowRecordModal(patients[0] || null)
+    } else if (actionParam === 'followup') {
+      setShowConsultationModal(true)
+    }
+  }, [location.search, patients])
+
+  // Consultation Form State
+  const [consultNotes, setConsultNotes] = useState({
+    chiefComplaint: 'Follow-up for type 2 diabetes management and mild morning fatigue.',
+    vitals: {
+      bp: '124/82 mmHg',
+      pulse: '74 bpm',
+      spo2: '98%',
+      temp: '98.4 °F'
+    },
+    observations: 'Patient reports steady compliance with Metformin 500mg. Fasting blood sugar logs show average 118 mg/dL over past 3 weeks. No hypoglycemic episodes.',
+    diagnosis: 'Type 2 Diabetes Mellitus - Well controlled on oral hypoglycemics.',
+    prescription: '1. Tab. Metformin 500mg - 1 tablet twice daily after meals.\n2. Tab. Methylcobalamin 1500 mcg - 1 tablet once daily.\n3. Continue lifestyle modifications and 40 min brisk walk.',
+    followUp: '2026-11-20'
+  })
+
+  const notify = (msg: string) => {
+    setToastMsg(msg)
+    setTimeout(() => setToastMsg(null), 4000)
   }
 
-  const handleJoinConsultation = (queueId: string, patientName: string, patientId: string) => {
-    // Update queue status to in-progress
-    updateQueueItem(queueId, 'in-progress')
-    setShowModal(true)
-    setModalAction('join')
+  // Active next patient
+  const readyPatientQueue = queue.find(q => {
+    const s = (q.status || '').toLowerCase()
+    return s === 'in-progress' || s === 'called' || s === 'waiting' || s === 'ready'
+  })
+  const activeToken = readyPatientQueue?.token || 'A-014'
+  const activePatientName = readyPatientQueue?.patientName || 'Maya Patel'
+  const activePatientObj = patients.find(p => p.id === readyPatientQueue?.patientId || p.name === activePatientName) || {
+    id: 'p-maya',
+    name: 'Maya Patel',
+    age: 34,
+    gender: 'Female',
+    phone: '+91 98201 45890',
+    abhaId: '91-4523-8890-1234',
+    allergies: ['No allergies recorded'],
+    medicalHistory: ['Type 2 Diabetes (2023)', 'Mild Hypertension']
+  }
+
+  // Filter schedule
+  const scheduleVisits = appointments.filter(a => {
+    const st = (a.status || '').toLowerCase()
+    if (activeTab === 'completed') return st === 'completed'
+    return st !== 'cancelled'
+  })
+
+  // Handle start consultation
+  const handleStartConsultationClick = () => {
+    if (readyPatientQueue) {
+      startConsultation(readyPatientQueue.id)
+    }
+    setShowConsultationModal(true)
+  }
+
+  // Handle finish consultation
+  const handleCompleteConsultationSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (readyPatientQueue) {
+      completeConsultation(
+        readyPatientQueue.id,
+        {
+          diagnosis: consultNotes.diagnosis,
+          observations: consultNotes.observations,
+          prescription: consultNotes.prescription,
+          vitals: `${consultNotes.vitals.bp} | Pulse: ${consultNotes.vitals.pulse} | SpO2: ${consultNotes.vitals.spo2}`,
+          notes: consultNotes.chiefComplaint,
+          followUpDate: consultNotes.followUp
+        }
+      )
+    }
+    notify(`Consultation for ${activePatientName} saved and signed. Medical record & queue updated.`)
+    setShowConsultationModal(false)
   }
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.3 }}
-      className="max-w-7xl mx-auto"
-    >
-      <div className="flex items-center justify-between mb-8">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toastMsg && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-5 right-5 z-50 bg-forest-green text-white px-5 py-3 rounded-xl shadow-lg border border-pale-sage flex items-center gap-3 text-sm font-medium"
+          >
+            <CheckCircleIcon className="w-5 h-5 text-emerald-300" />
+            <span>{toastMsg}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Breadcrumb + Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-serif font-bold text-forest-green">Doctor Dashboard</h1>
-          <p className="text-text-secondary">Welcome back, Dr. John Doe</p>
+          <p className="text-xs font-semibold tracking-wider text-forest-green/70 uppercase mb-1">
+            OPD OPERATIONS / CLINICAL WORKSPACE
+          </p>
+          <h1 className="text-3xl md:text-4xl font-serif font-bold text-forest-green tracking-tight">
+            Good morning, Dr. Cooper.
+          </h1>
+          <p className="text-sm text-text-secondary mt-1">
+            Your consultations and schedule, with the right context at hand.
+          </p>
         </div>
-        <motion.div 
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className="flex items-center space-x-2 px-4 py-2 bg-light-green text-forest-green rounded-lg cursor-pointer"
-          onClick={() => {
-            const next = getNextInQueue()
-            if (next) handleJoinConsultation(next.id, next.patientName, next.patientId)
-          }}
+
+        <button
+          onClick={() => notify('OPD schedule is open for 12 appointments today.')}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-pale-sage bg-white text-forest-green font-medium text-sm hover:bg-pale-sage/40 transition-colors shadow-sm self-start md:self-auto"
         >
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span className="font-medium">Available</span>
-        </motion.div>
+          <CalendarIcon className="w-4 h-4 text-forest-green" />
+          <span>Open schedule</span>
+        </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <motion.div 
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className="bg-white p-4 rounded-lg shadow-card hover:shadow-card-hover transition-shadow"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2 bg-pale-sage text-white rounded-lg">
-              <UserIcon className="w-5 h-5" />
-            </div>
-            <span className="text-sm text-green-500">+2</span>
+      {/* Top 4 Stat Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-xl p-5 border border-pale-sage shadow-sm">
+          <div className="flex items-center gap-2 text-text-secondary text-xs font-medium mb-2">
+            <CalendarIcon className="w-4 h-4 text-forest-green" />
+            <span>Today's consultations</span>
           </div>
-          <div className="text-3xl font-bold text-forest-green">{stats.todayPatients}</div>
-          <div className="text-sm text-text-secondary mt-1">Patients Today</div>
-        </motion.div>
+          <div className="text-3xl font-serif font-bold text-forest-green">12</div>
+          <p className="text-xs text-text-secondary mt-1">Morning & afternoon clinic</p>
+        </div>
 
-        <motion.div 
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className="bg-white p-4 rounded-lg shadow-card hover:shadow-card-hover transition-shadow"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2 bg-light-green text-forest-green rounded-lg">
-              <CheckBadgeIcon className="w-5 h-5" />
-            </div>
-            <span className="text-sm text-green-500">+1</span>
+        <div className="bg-white rounded-xl p-5 border border-pale-sage shadow-sm">
+          <div className="flex items-center gap-2 text-text-secondary text-xs font-medium mb-2">
+            <ClipboardDocumentCheckIcon className="w-4 h-4 text-forest-green" />
+            <span>Completed</span>
           </div>
-          <div className="text-3xl font-bold text-forest-green">{stats.completedConsultations}</div>
-          <div className="text-sm text-text-secondary mt-1">Completed</div>
-        </motion.div>
+          <div className="text-3xl font-serif font-bold text-forest-green">03</div>
+          <p className="text-xs text-text-secondary mt-1">Notes saved for every visit</p>
+        </div>
 
-        <motion.div 
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className="bg-white p-4 rounded-lg shadow-card hover:shadow-card-hover transition-shadow"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2 bg-yellow-100 text-yellow-600 rounded-lg">
-              <ClockIcon className="w-5 h-5" />
-            </div>
-            <span className="text-sm text-yellow-500">Active</span>
+        <div className="bg-white rounded-xl p-5 border border-pale-sage shadow-sm">
+          <div className="flex items-center gap-2 text-text-secondary text-xs font-medium mb-2">
+            <UserIcon className="w-4 h-4 text-forest-green" />
+            <span>Ready to see you</span>
           </div>
-          <div className="text-3xl font-bold text-forest-green">{stats.pendingPatients}</div>
-          <div className="text-sm text-text-secondary mt-1">Waiting</div>
-        </motion.div>
+          <div className="text-3xl font-serif font-bold text-forest-green">02</div>
+          <p className="text-xs text-text-secondary mt-1">Room 02 • Family medicine</p>
+        </div>
 
-        <motion.div 
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className="bg-white p-4 rounded-lg shadow-card hover:shadow-card-hover transition-shadow"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-              <RectangleStackIcon className="w-5 h-5" />
-            </div>
+        <div className="bg-white rounded-xl p-5 border border-pale-sage shadow-sm">
+          <div className="flex items-center gap-2 text-text-secondary text-xs font-medium mb-2">
+            <ClockIcon className="w-4 h-4 text-forest-green" />
+            <span>Next break</span>
           </div>
-          <div className="text-3xl font-bold text-forest-green">{stats.averageWaitTime}</div>
-          <div className="text-sm text-text-secondary mt-1">Avg Wait Time</div>
-        </motion.div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Today's Appointments */}
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.1 }}
-          className="bg-white rounded-lg shadow-card hover:shadow-card-hover overflow-hidden"
-        >
-          <div className="p-6 border-b border-light-green">
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => setActiveTab('appointments')}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  activeTab === 'appointments' 
-                    ? 'bg-forest-green text-white' 
-                    : 'bg-warm-cream/50 text-text-secondary hover:bg-warm-cream'
-                }`}
-              >
-                Appointments
-              </button>
-              <button
-                onClick={() => setActiveTab('patients')}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  activeTab === 'patients' 
-                    ? 'bg-forest-green text-white' 
-                    : 'bg-warm-cream/50 text-text-secondary hover:bg-warm-cream'
-                }`}
-              >
-                My Patients
-              </button>
-            </div>
-          </div>
-
-          <div className="p-6">
-            {activeTab === 'appointments' && (
-              <div className="space-y-4">
-                {appointmentList.map((appointment, index) => {
-                  // Find queue item for this patient appointment
-                  const queueItem = queue.find(q => q.patientId === appointment.patientId)
-                  
-                  return (
-                    <motion.div
-                      key={appointment.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.2 + index * 0.05 }}
-                      className="flex items-center justify-between p-4 bg-light-green rounded-lg hover:shadow-card transition-shadow cursor-pointer"
-                      onClick={() => {
-                        if (queueItem) {
-                          handleJoinConsultation(queueItem.id, appointment.patientName, appointment.patientId)
-                        }
-                      }}
-                    >
-                    <div className="flex items-center space-x-4">
-                      <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-                        appointment.status === 'completed' 
-                          ? 'bg-green-100 text-green-600' 
-                          : appointment.status === 'in-progress'
-                            ? 'bg-yellow-100 text-yellow-600'
-                            : 'bg-pale-sage text-white'
-                      }`}>
-                        {appointment.status === 'completed' ? (
-                          <CheckBadgeIcon className="w-6 h-6" />
-                        ) : appointment.status === 'in-progress' ? (
-                          <ChatBubbleBottomCenterTextIcon className="w-6 h-6" />
-                        ) : (
-                          <CalendarIcon className="w-6 h-6" />
-                        )}
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-forest-green">{appointment.patientName}</h4>
-                        <p className="text-sm text-text-secondary">{appointment.type}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-lg font-bold text-forest-green">{appointment.time}</div>
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        appointment.status === 'completed' 
-                          ? 'bg-green-100 text-green-800' 
-                          : appointment.status === 'in-progress'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-gray-200 text-gray-600'
-                      }`}>
-                        {appointment.status === 'in-progress' ? 'In Progress' : appointment.status}
-                      </span>
-                    </div>
-                  </motion.div>
-                  )
-                })}
-              </div>
-            )}
-
-            {activeTab === 'patients' && (
-              <div className="space-y-4">
-                {patientList.map((patient, index) => {
-                  // Find queue item for this patient
-                  const queueItem = queue.find(q => q.patientId === patient.id)
-                  
-                  return (
-                    <motion.div
-                      key={patient.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.2 + index * 0.05 }}
-                    className="flex items-center justify-between p-4 bg-light-green rounded-lg hover:shadow-card transition-shadow cursor-pointer"
-                  >
-                    <div className="flex items-center space-x-4">
-                      <div className="w-12 h-12 bg-pale-sage text-white rounded-lg flex items-center justify-center font-bold text-lg">
-                        {patient.name.charAt(0)}
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-forest-green">{patient.name}</h4>
-                        <p className="text-sm text-text-secondary">{patient.condition}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm text-text-secondary">{patient.lastVisit}</div>
-                      <span className={`inline-block px-2 py-1 rounded text-xs font-medium mt-1 ${
-                        patient.status === 'completed' 
-                          ? 'bg-green-100 text-green-800' 
-                          : patient.status === 'in-consultation'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-blue-100 text-blue-800'
-                      }`}>
-                        {patient.status}
-                      </span>
-                    </div>
-                  </motion.div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        </motion.div>
-
-        {/* Quick Actions & Stats */}
-        <div className="space-y-6">
-          {/* Current Patient */}
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.1 }}
-            className="bg-white rounded-lg shadow-card hover:shadow-card-hover p-6"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-serif font-bold text-forest-green">Current Patient</h3>
-              <div className="flex items-center space-x-2">
-                {currentConsultationPatient ? (
-                  <>
-                    <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                    <span className="text-sm text-text-secondary">Consultation in progress</span>
-                  </>
-                ) : (
-                  <span className="text-sm text-text-secondary">No active consultation</span>
-                )}
-              </div>
-            </div>
-            {currentConsultationPatient ? (
-              <div className="flex items-center space-x-4">
-                <div className="w-16 h-16 bg-pale-sage/20 rounded-xl flex items-center justify-center">
-                  <span className="text-2xl font-bold text-forest-green">
-                    {currentConsultationPatient.name.split(' ').map(n => n[0]).join('')}
-                  </span>
-                </div>
-                <div>
-                  <h4 className="text-xl font-bold text-forest-green">{currentConsultationPatient.name}</h4>
-                  <p className="text-sm text-text-secondary">{currentConsultationPatient.age} years old • {currentConsultationPatient.condition}</p>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-4 text-text-secondary">
-                <div className="flex items-center justify-center space-x-2 mb-2">
-                  <ChatBubbleBottomCenterTextIcon className="w-6 h-6" />
-                  <span>No active consultation</span>
-                </div>
-              </div>
-            )}
-            <button 
-              onClick={() => {
-                const next = getNextInQueue()
-                if (next) handleJoinConsultation(next.id, next.patientName, next.patientId)
-                else if (waitingPatients.length > 0) {
-                  const queueItem = queue.find(q => q.patientId === waitingPatients[0].id)
-                  if (queueItem) handleJoinConsultation(queueItem.id, waitingPatients[0].name, waitingPatients[0].id)
-                }
-              }}
-              className={`mt-6 w-full py-3 rounded-lg font-bold transition-colors ${
-                waitingPatients.length > 0
-                  ? 'bg-forest-green text-white hover:bg-green-600'
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }`}
-              disabled={waitingPatients.length === 0}
-            >
-              {waitingPatients.length > 0 ? 'Join Consultation' : 'No patients waiting'}
-            </button>
-          </motion.div>
-
-          {/* Quick Actions */}
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="bg-white rounded-lg shadow-card hover:shadow-card-hover p-6"
-          >
-            <h3 className="text-lg font-serif font-bold text-forest-green mb-4">Quick Actions</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { icon: UserIcon, label: 'New Patient', action: 'new' },
-                { icon: DocumentTextIcon, label: 'Prescription', action: 'prescription' },
-                { icon: RectangleStackIcon, label: 'Lab Orders', action: 'lab' },
-                { icon: ChatBubbleBottomCenterTextIcon, label: 'Consult', action: 'consult' }
-              ].map((item, index) => (
-                <motion.button
-                  key={index}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="flex flex-col items-center justify-center p-3 bg-light-green rounded-lg hover:bg-pale-sage hover:text-white transition-colors"
-                  onClick={() => {
-                    if (item.action === 'new') setShowNewPatientForm(true)
-                    else if (item.action === 'prescription') alert('Opening prescription form...')
-                    else if (item.action === 'lab') alert('Opening lab orders...')
-                    else if (item.action === 'consult') {
-                      const next = getNextInQueue()
-                      if (next) handleJoinConsultation(next.id, next.patientName, next.patientId)
-                    }
-                  }}
-                >
-                  <item.icon className="w-5 h-5 mb-2" />
-                  <span className="text-sm font-medium">{item.label}</span>
-                </motion.button>
-              ))}
-            </div>
-          </motion.div>
-
-          {/* Upcoming Schedule */}
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
-            className="bg-white rounded-lg shadow-card hover:shadow-card-hover p-6"
-          >
-            <h3 className="text-lg font-serif font-bold text-forest-green mb-4">Today's Schedule</h3>
-            <div className="space-y-3">
-              {[
-                { time: '11:00 AM', title: 'Lunch Break', type: 'break' },
-                { time: '02:30 PM', title: 'Medical Research Review', type: 'work' },
-                { time: '04:00 PM', title: 'Team Meeting', type: 'work' },
-              ].map((slot, index) => (
-                <motion.div
-                  key={index}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="flex items-center space-x-4 p-3 bg-light-green rounded-lg cursor-pointer"
-                  onClick={() => {
-                    if (slot.type === 'work') {
-                      alert(`Opening: ${slot.title}`)
-                    }
-                  }}
-                >
-                  <div className="text-sm font-bold text-pale-sage w-16">{slot.time}</div>
-                  <div className="flex-1">
-                    <div className={`font-medium ${slot.type === 'work' ? 'text-forest-green' : 'text-text-secondary'}`}>
-                      {slot.title}
-                    </div>
-                  </div>
-                  <div className={`w-2 h-2 rounded-full ${
-                    slot.type === 'work' ? 'bg-pale-sage' : 'bg-gray-300'
-                  }`}></div>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
+          <div className="text-3xl font-serif font-bold text-forest-green">12:30</div>
+          <p className="text-xs text-text-secondary mt-1">30 min • Protected time</p>
         </div>
       </div>
 
-      {/* New Patient Modal */}
-      {showNewPatientForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-xl border border-pale-sage">
-            <div className="p-6 border-b border-light-green flex items-center justify-between">
-              <h2 className="text-xl font-serif font-bold text-forest-green">New Patient Registration</h2>
-              <button 
-                onClick={() => setShowNewPatientForm(false)}
-                className="w-8 h-8 bg-warm-cream rounded-full flex items-center justify-center hover:bg-gray-200"
-              >
-                <span className="text-xl font-bold text-gray-600">×</span>
-              </button>
+      {/* Main Grid: Left Column (Next Consult + Morning Schedule) + Right Column (Patient at a glance + Care team) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column (2 cols) */}
+        <div className="lg:col-span-2 space-y-6">
+          
+          {/* Next Consultation Highlight Card */}
+          <div className="bg-[#FAFBF9] rounded-xl p-6 border border-pale-sage shadow-sm relative overflow-hidden">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs uppercase font-semibold text-text-secondary tracking-wider">
+                Next consultation
+              </span>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-100/80 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                Ready for consultation
+              </span>
             </div>
 
-            <div className="p-6">
-              <p className="text-text-secondary mb-4">This feature would open the patient registration form.</p>
-              <div className="flex justify-end space-x-3">
-                <button 
-                  onClick={() => setShowNewPatientForm(false)}
-                  className="px-4 py-2 bg-warm-cream text-text-secondary rounded-lg hover:bg-gray-200"
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 my-2">
+              <div>
+                <h3 className="text-2xl font-serif font-bold text-forest-green">
+                  {activePatientName} · Follow-up
+                </h3>
+                <p className="text-xs text-stone-600 font-medium mt-1">
+                  09:45–10:00 AM · Room 02 · <span className="font-bold text-forest-green">Token {activeToken}</span>
+                </p>
+                <p className="text-xs text-text-secondary mt-2 max-w-lg leading-relaxed">
+                  Intake complete. Previous visit summary and patient questions are ready to review.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row md:flex-col gap-2 shrink-0">
+                <button
+                  onClick={() => {
+                    const nextP = callNextPatient()
+                    if (nextP) {
+                      notify(`Called Token ${nextP.token} for ${nextP.patientName} to Room 02.`)
+                    } else {
+                      notify('No waiting patients remaining in queue.')
+                    }
+                  }}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-[#EFF5EE] border border-pale-sage text-forest-green text-xs font-bold hover:bg-[#E2ECE4] transition-colors shadow-2xs"
                 >
-                  Close
+                  <ClockIcon className="w-4 h-4 text-forest-green" />
+                  <span>Call Next Patient</span>
+                </button>
+                <button
+                  onClick={handleStartConsultationClick}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-forest-green text-white font-medium text-sm hover:bg-forest-green/90 transition-all shadow-sm"
+                >
+                  <span>→ Start consultation</span>
+                </button>
+                <button
+                  onClick={() => setShowRecordModal(activePatientObj)}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-pale-sage bg-white text-forest-green text-xs font-semibold hover:bg-pale-sage/30 transition-colors"
+                >
+                  <span>Review previous notes</span>
                 </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* Modal */}
-      <AnimatePresence>
-        {showModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-            onClick={() => setShowModal(false)}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white rounded-xl max-w-md w-full shadow-2xl overflow-hidden"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="p-6 border-b border-light-green">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-serif font-bold text-forest-green">
-                    {modalAction === 'join' && 'Join Consultation'}
-                    {modalAction === 'start' && 'Start Session'}
-                  </h2>
-                  <button 
-                    onClick={() => setShowModal(false)}
-                    className="w-8 h-8 bg-warm-cream rounded-full flex items-center justify-center hover:bg-gray-200"
-                  >
-                    <span className="text-xl font-bold text-gray-600">×</span>
-                  </button>
+          {/* Your Morning Schedule */}
+          <div className="bg-white rounded-xl p-6 border border-pale-sage shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-serif font-bold text-forest-green">
+                Your morning schedule
+              </h3>
+              <button 
+                onClick={() => notify('Full day schedule: 12 patients confirmed.')}
+                className="text-xs font-semibold text-forest-green hover:underline flex items-center gap-1"
+              >
+                Full day ↗
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="inline-flex p-1 rounded-lg bg-[#F5F8F6] border border-pale-sage text-xs mb-4">
+              <button
+                onClick={() => setActiveTab('morning')}
+                className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+                  activeTab === 'morning' ? 'bg-forest-green text-white shadow-xs' : 'text-text-secondary hover:text-forest-green'
+                }`}
+              >
+                Morning
+              </button>
+              <button
+                onClick={() => setActiveTab('afternoon')}
+                className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+                  activeTab === 'afternoon' ? 'bg-forest-green text-white shadow-xs' : 'text-text-secondary hover:text-forest-green'
+                }`}
+              >
+                Afternoon
+              </button>
+              <button
+                onClick={() => setActiveTab('completed')}
+                className={`px-3 py-1.5 rounded-md font-medium transition-colors ${
+                  activeTab === 'completed' ? 'bg-forest-green text-white shadow-xs' : 'text-text-secondary hover:text-forest-green'
+                }`}
+              >
+                Completed
+              </button>
+            </div>
+
+            {/* Schedule List */}
+            <div className="space-y-2.5">
+              {scheduleVisits.slice(0, 5).map((visit, idx) => (
+                <div 
+                  key={visit.id}
+                  className="p-3.5 rounded-xl border border-pale-sage/70 hover:bg-[#FAFBF9] transition-colors flex items-center justify-between gap-3 text-xs"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="text-stone-800 font-semibold w-16">
+                      <div>{visit.time}</div>
+                      <div className="text-[10px] text-text-secondary font-normal">15 min</div>
+                    </div>
+                    <div>
+                      <div className="font-semibold text-forest-green text-xs">
+                        {visit.patientName}
+                      </div>
+                      <div className="text-[11px] text-text-secondary">
+                        {visit.type} · {visit.patientId || 'WC-1042'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${
+                      visit.status === 'in-progress'
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        : visit.status === 'confirmed'
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : 'bg-stone-50 text-stone-600 border-stone-200'
+                    }`}>
+                      {visit.status === 'confirmed' ? 'Ready' : visit.status}
+                    </span>
+                    <button
+                      onClick={() => setShowRecordModal({ name: visit.patientName, id: visit.patientId })}
+                      className="text-xs font-semibold text-forest-green hover:underline inline-flex items-center gap-1"
+                    >
+                      <span>View record</span>
+                      <span>↗</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <p className="text-xs text-text-secondary/80 mt-4 pt-3 border-t border-pale-sage/40">
+              11:30–12:30 · Flexible appointments / 12:30–13:00 · Lunch break
+            </p>
+          </div>
+        </div>
+
+        {/* Right Column (1 col): Patient at a glance + Care team */}
+        <div className="space-y-6">
+          
+          {/* Patient at a glance */}
+          <div className="bg-[#FAFBF9] rounded-xl p-6 border border-pale-sage shadow-sm">
+            <h4 className="text-xs uppercase font-semibold text-text-secondary tracking-wider mb-4">
+              Patient at a glance
+            </h4>
+
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-12 h-12 rounded-full bg-pale-sage/70 text-forest-green font-serif font-bold text-sm flex items-center justify-center shrink-0">
+                {activePatientName.split(' ').map(n => n[0]).join('').slice(0, 2)}
+              </div>
+              <div>
+                <h3 className="text-xl font-serif font-bold text-forest-green">
+                  {activePatientName}
+                </h3>
+                <div className="text-xs text-text-secondary">
+                  34 years • {activePatientObj.id || 'WC-1042'}
                 </div>
               </div>
-              <div className="p-6">
-                <p className="text-text-secondary mb-4">
-                  {modalAction === 'join' && 'Join the current consultation session to continue patient care.'}
-                  {modalAction === 'start' && 'Start a new consultation session with the selected patient.'}
+            </div>
+
+            <div className="inline-block mb-4">
+              <span className="text-[11px] font-semibold bg-pale-sage/80 text-forest-green px-2.5 py-0.5 rounded-full">
+                Token {activeToken} • Ready
+              </span>
+            </div>
+
+            <div className="space-y-2.5 text-xs border-t border-pale-sage pt-3 mb-4">
+              <div className="flex items-start gap-2.5">
+                <CalendarIcon className="w-4 h-4 text-forest-green shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-semibold text-stone-800">Follow-up consultation</div>
+                  <div className="text-text-secondary text-[11px]">Today • 09:45 AM • Room 02</div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5">
+                <DocumentTextIcon className="w-4 h-4 text-forest-green shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-semibold text-stone-800">Last visit: 29 Sep 2026</div>
+                  <div className="text-text-secondary text-[11px]">Visit summary available</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Allergy record */}
+            <div className="mb-4">
+              <span className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1">
+                Allergy record
+              </span>
+              <div className="p-2.5 rounded-lg bg-white border border-pale-sage text-xs text-stone-700">
+                No allergies recorded
+              </div>
+              <p className="text-[11px] text-text-secondary mt-1">
+                Confirm allergies and medication history with the patient at every visit.
+              </p>
+            </div>
+
+            {/* Buttons */}
+            <div className="space-y-2">
+              <button
+                onClick={() => setShowRecordModal(activePatientObj)}
+                className="w-full py-2.5 rounded-lg bg-forest-green text-white font-medium text-xs hover:bg-forest-green/90 transition-all shadow-sm"
+              >
+                Open patient record
+              </button>
+              <button
+                onClick={() => setShowIntakeModal(activePatientObj)}
+                className="w-full py-2 rounded-lg border border-pale-sage bg-white text-forest-green font-semibold text-xs hover:bg-pale-sage/30 transition-colors"
+              >
+                View intake form
+              </button>
+            </div>
+          </div>
+
+          {/* Care Team */}
+          <div className="bg-white rounded-xl p-6 border border-pale-sage shadow-sm space-y-4">
+            <h4 className="text-base font-serif font-bold text-forest-green">
+              Care team
+            </h4>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs p-2 rounded-lg hover:bg-[#FAFBF9]">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-600">
+                    <UserIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-semibold text-forest-green">Olivia Martin</div>
+                    <div className="text-[11px] text-text-secondary">Front desk • Online</div>
+                  </div>
+                </div>
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              </div>
+
+              <div className="flex items-center justify-between text-xs p-2 rounded-lg hover:bg-[#FAFBF9]">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-600">
+                    <UserIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-semibold text-forest-green">Dr. Daniel Kim</div>
+                    <div className="text-[11px] text-text-secondary">Room 03 • Available at 10:00</div>
+                  </div>
+                </div>
+                <span className="w-2 h-2 rounded-full bg-stone-300"></span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowReceptionModal(true)}
+              className="w-full py-2.5 rounded-lg border border-pale-sage bg-white text-forest-green font-semibold text-xs hover:bg-pale-sage/30 transition-colors flex items-center justify-center gap-2"
+            >
+              <ChatBubbleLeftRightIcon className="w-4 h-4" />
+              <span>Message reception</span>
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      {/* Modal: Interactive Consultation Notes & Diagnosis */}
+      <AnimatePresence>
+        {showConsultationModal && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 md:p-8 border border-pale-sage shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-pale-sage pb-4 mb-5">
+                <div>
+                  <span className="text-xs font-semibold text-forest-green uppercase tracking-wider bg-pale-sage/70 px-2.5 py-0.5 rounded-full">
+                    Active Clinical Consultation • Room 02
+                  </span>
+                  <h2 className="text-2xl font-serif font-bold text-forest-green mt-1">
+                    {activePatientName} (Token {activeToken})
+                  </h2>
+                </div>
+                <button onClick={() => setShowConsultationModal(false)} className="text-stone-400 hover:text-stone-600">
+                  <XMarkIcon className="w-6 h-6" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCompleteConsultationSubmit} className="space-y-4 text-xs">
+                {/* Vitals row */}
+                <div className="p-4 rounded-xl bg-[#FAFBF9] border border-pale-sage">
+                  <h4 className="font-semibold text-forest-green mb-2 uppercase tracking-wider text-[11px]">
+                    Recorded Vitals (Intake)
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div>
+                      <span className="text-text-secondary block">Blood Pressure:</span>
+                      <input 
+                        type="text" 
+                        value={consultNotes.vitals.bp} 
+                        onChange={(e) => setConsultNotes({ ...consultNotes, vitals: { ...consultNotes.vitals, bp: e.target.value } })}
+                        className="font-semibold text-stone-800 p-1 border rounded w-full bg-white text-xs" 
+                      />
+                    </div>
+                    <div>
+                      <span className="text-text-secondary block">Heart Rate:</span>
+                      <input 
+                        type="text" 
+                        value={consultNotes.vitals.pulse} 
+                        onChange={(e) => setConsultNotes({ ...consultNotes, vitals: { ...consultNotes.vitals, pulse: e.target.value } })}
+                        className="font-semibold text-stone-800 p-1 border rounded w-full bg-white text-xs" 
+                      />
+                    </div>
+                    <div>
+                      <span className="text-text-secondary block">SpO2:</span>
+                      <input 
+                        type="text" 
+                        value={consultNotes.vitals.spo2} 
+                        onChange={(e) => setConsultNotes({ ...consultNotes, vitals: { ...consultNotes.vitals, spo2: e.target.value } })}
+                        className="font-semibold text-stone-800 p-1 border rounded w-full bg-white text-xs" 
+                      />
+                    </div>
+                    <div>
+                      <span className="text-text-secondary block">Temperature:</span>
+                      <input 
+                        type="text" 
+                        value={consultNotes.vitals.temp} 
+                        onChange={(e) => setConsultNotes({ ...consultNotes, vitals: { ...consultNotes.vitals, temp: e.target.value } })}
+                        className="font-semibold text-stone-800 p-1 border rounded w-full bg-white text-xs" 
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Chief Complaint */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1">
+                    Chief Complaint / Symptoms
+                  </label>
+                  <input
+                    type="text"
+                    value={consultNotes.chiefComplaint}
+                    onChange={(e) => setConsultNotes({ ...consultNotes, chiefComplaint: e.target.value })}
+                    className="w-full p-2.5 rounded-lg border border-pale-sage bg-white text-xs"
+                  />
+                </div>
+
+                {/* Observations & Diagnosis */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1">
+                    Clinical Observations & Physical Examination
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={consultNotes.observations}
+                    onChange={(e) => setConsultNotes({ ...consultNotes, observations: e.target.value })}
+                    className="w-full p-2.5 rounded-lg border border-pale-sage bg-white text-xs leading-relaxed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1">
+                    Working Diagnosis / Assessment
+                  </label>
+                  <input
+                    type="text"
+                    value={consultNotes.diagnosis}
+                    onChange={(e) => setConsultNotes({ ...consultNotes, diagnosis: e.target.value })}
+                    className="w-full p-2.5 rounded-lg border border-pale-sage bg-white text-xs font-semibold text-forest-green"
+                  />
+                </div>
+
+                {/* Prescription */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1">
+                    Prescription & Therapeutic Recommendations
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={consultNotes.prescription}
+                    onChange={(e) => setConsultNotes({ ...consultNotes, prescription: e.target.value })}
+                    className="w-full p-2.5 rounded-lg border border-pale-sage bg-white text-xs leading-relaxed font-mono"
+                  />
+                </div>
+
+                {/* Next Follow Up */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1">
+                      Recommended Follow-up Date
+                    </label>
+                    <input
+                      type="date"
+                      value={consultNotes.followUp}
+                      onChange={(e) => setConsultNotes({ ...consultNotes, followUp: e.target.value })}
+                      className="w-full p-2.5 rounded-lg border border-pale-sage bg-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1">
+                      Referral / Lab Orders
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Fasting HbA1c, Lipid Profile in 4 weeks"
+                      className="w-full p-2.5 rounded-lg border border-pale-sage bg-white text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-pale-sage flex items-center justify-between">
+                  <span className="text-[11px] text-text-secondary">
+                    Electronically signed by Dr. Elena Cooper (Reg. MCI/MH/2014)
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowConsultationModal(false)}
+                      className="px-4 py-2 rounded-lg border border-stone-200 text-stone-700 font-medium hover:bg-stone-50"
+                    >
+                      Hold
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 rounded-lg bg-forest-green text-white font-medium hover:bg-forest-green/90 transition-colors shadow-sm"
+                    >
+                      Complete & Sign Consultation
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal: View Patient Record */}
+      <AnimatePresence>
+        {showRecordModal && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl max-w-lg w-full p-6 border border-pale-sage shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-pale-sage pb-3 mb-4">
+                <h3 className="text-xl font-serif font-bold text-forest-green">
+                  EMR Medical Record: {showRecordModal.name || 'Maya Patel'}
+                </h3>
+                <button onClick={() => setShowRecordModal(null)} className="text-stone-400 hover:text-stone-600">
+                  <XMarkIcon className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div className="p-3 rounded-lg bg-[#FAFBF9] border border-pale-sage">
+                  <div className="font-semibold text-forest-green mb-1">ABHA Health Profile (India)</div>
+                  <div className="text-text-secondary">ABHA ID: 91-4523-8890-1234</div>
+                  <div className="text-text-secondary">ABHA Address: maya.patel@abdm</div>
+                </div>
+
+                <div>
+                  <span className="font-semibold text-stone-800 block mb-1">Chronic Diagnoses</span>
+                  <ul className="list-disc list-inside text-text-secondary space-y-0.5">
+                    <li>Type 2 Diabetes Mellitus (E11.9) - Diagnosed Oct 2023</li>
+                    <li>Essential Primary Hypertension (I10) - Stable</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <span className="font-semibold text-stone-800 block mb-1">Current Active Medications</span>
+                  <ul className="list-disc list-inside text-text-secondary space-y-0.5">
+                    <li>Tab. Metformin HCl 500mg - 1 tab BID with meals</li>
+                    <li>Tab. Telmisartan 40mg - 1 tab OD morning</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <span className="font-semibold text-stone-800 block mb-1">Recent Lab Results</span>
+                  <div className="p-2.5 rounded-lg border border-pale-sage bg-white flex justify-between">
+                    <span>HbA1c (15 Sep 2026): <strong>6.8%</strong></span>
+                    <span>FBS: <strong>112 mg/dL</strong></span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 flex justify-end">
+                <button
+                  onClick={() => setShowRecordModal(null)}
+                  className="px-4 py-2 rounded-lg bg-forest-green text-white text-xs font-medium hover:bg-forest-green/90"
+                >
+                  Close Record
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal: View Intake Form */}
+      <AnimatePresence>
+        {showIntakeModal && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl max-w-md w-full p-6 border border-pale-sage shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-pale-sage pb-3 mb-4">
+                <h3 className="text-xl font-serif font-bold text-forest-green">Reception Intake Summary</h3>
+                <button onClick={() => setShowIntakeModal(null)} className="text-stone-400 hover:text-stone-600">
+                  <XMarkIcon className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs text-stone-700">
+                <div className="p-3 rounded-lg bg-[#FAFBF9] border border-pale-sage space-y-1">
+                  <div><strong>Check-in Time:</strong> 09:35 AM</div>
+                  <div><strong>Verified ID:</strong> Aadhaar verified (biometric / OTP)</div>
+                  <div><strong>Primary Concern:</strong> Routine prescription refill and checkup</div>
+                  <div><strong>Pain Score:</strong> 0 / 10</div>
+                  <div><strong>Mobility:</strong> Ambulatory, no assistance needed</div>
+                </div>
+              </div>
+
+              <div className="mt-5 flex justify-end">
+                <button
+                  onClick={() => setShowIntakeModal(null)}
+                  className="px-4 py-2 rounded-lg bg-forest-green text-white text-xs font-medium hover:bg-forest-green/90"
+                >
+                  Close Intake
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal: Message Reception */}
+      <AnimatePresence>
+        {showReceptionModal && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl max-w-md w-full p-6 border border-pale-sage shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-pale-sage pb-3 mb-4">
+                <h3 className="text-xl font-serif font-bold text-forest-green">Message Front Desk</h3>
+                <button onClick={() => setShowReceptionModal(false)} className="text-stone-400 hover:text-stone-600">
+                  <XMarkIcon className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <p className="text-text-secondary">
+                  Send immediate intercom note to Olivia Martin (Reception desk):
                 </p>
-                <div className="flex justify-end space-x-3">
-                  <button 
-                    onClick={() => setShowModal(false)}
-                    className="px-4 py-2 bg-warm-cream text-text-secondary rounded-lg hover:bg-gray-200"
+                <textarea
+                  rows={3}
+                  value={receptionMsg}
+                  onChange={(e) => setReceptionMsg(e.target.value)}
+                  placeholder="e.g. Please send next patient to Room 02 in 5 minutes..."
+                  className="w-full p-3 rounded-lg border border-pale-sage bg-white text-xs"
+                />
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => setShowReceptionModal(false)}
+                    className="px-4 py-2 rounded-lg border border-stone-200 text-stone-600 hover:bg-stone-50"
                   >
                     Cancel
                   </button>
-                  <button 
-                    onClick={() => setShowModal(false)}
-                    className="px-4 py-2 bg-forest-green text-white rounded-lg hover:bg-green-600"
+                  <button
+                    onClick={() => {
+                      notify('Intercom dispatched to front desk: ' + (receptionMsg || 'Ready for next patient.'))
+                      setReceptionMsg('')
+                      setShowReceptionModal(false)
+                    }}
+                    className="px-4 py-2 rounded-lg bg-forest-green text-white font-medium hover:bg-forest-green/90"
                   >
-                    Continue
+                    Send Message
                   </button>
                 </div>
               </div>
             </motion.div>
-          </motion.div>
+          </div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </div>
   )
 }

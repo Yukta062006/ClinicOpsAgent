@@ -1,640 +1,415 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { 
-  ArrowTrendingUpIcon, 
-  CheckCircleIcon,
-  TrophyIcon,
-  StarIcon,
-  CalendarIcon,
-  ClockIcon,
-  BookOpenIcon,
-  FireIcon,
-  AcademicCapIcon,
-  PlayIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  RefreshIcon
-} from '@heroicons/react/24/outline'
-import { motion, AnimatePresence } from 'framer-motion'
+  Trophy, 
+  Sparkles,
+  BookOpen, 
+  HeartPulse, 
+  Check, 
+  ArrowRight,
+  GraduationCap,
+  Award,
+  Apple,
+  Moon,
+  Footprints,
+  ChevronRight,
+  CheckCircle2,
+  Clock,
+  Flame,
+  Target
+} from 'lucide-react'
 import { useData } from '../context/DataContext'
 
 export default function LearningProgress() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'achievements'>('overview')
-  const [currentLesson, setCurrentLesson] = useState<string | null>(null)
-  const [lessonProgress, setLessonProgress] = useState(0)
-  const [quizAnswer, setQuizAnswer] = useState<string | null>(null)
-  const [quizResult, setQuizResult] = useState<'correct' | 'incorrect' | null>(null)
-  const [currentLessonIndex, setCurrentLessonIndex] = useState(0)
-  
+  const navigate = useNavigate()
   const { 
+    userPoints, 
+    userStreak, 
+    userScores,
     lessons,
     achievements,
-    userPoints,
-    userStreak,
-    completeLesson
+    currentPatient,
+    user
   } = useData()
 
-  const stats = {
-    totalPoints: userPoints,
-    completedLessons: lessons.filter(l => l.completed).length,
-    currentStreak: userStreak,
-    quizAverage: 92,
-    timeLearned: 45.5
-  }
+  const displayName = user?.name || currentPatient?.name || 'Yukta Ravindra Thakur'
+  const initial = displayName.charAt(0)
 
-  const completedLessons = lessons.filter(l => l.completed).map(l => ({
-    id: l.id,
-    title: l.title,
-    date: l.dateCompleted,
-    score: l.score,
-    completed: l.completed,
-    duration: l.duration
-  }))
-
-  const [currentLessonData, setCurrentLessonData] = useState<{
-    title: string
-    content: string
-    quiz: { question: string; options: string[]; correct: number }
-  } | null>(null)
-
-  const startLesson = (lessonId: string) => {
-    setCurrentLesson(lessonId)
-    setLessonProgress(0)
-    setQuizAnswer(null)
-    setQuizResult(null)
-    
-    // Determine lesson index for question variation
-    const index = parseInt(lessonId.replace('lesson-', '')) - 1
-    setCurrentLessonIndex(index)
-
-    if (lessonId === 'lesson-1') {
-      setCurrentLessonData({
-        title: 'Diabetes Prevention',
-        content: 'Diabetes is a chronic condition that affects how your body turns food into energy. Most of the food you eat is broken down into sugar (glucose) and released into your bloodstream. When your blood sugar goes up, it signals your pancreas to release insulin. Insulin acts like a key to let the blood sugar into your body\'s cells for use as energy.\n\nPreventing diabetes involves maintaining a healthy weight, eating a balanced diet, and getting regular physical activity. Even modest weight loss - about 5 to 7 percent of your body weight - can help prevent or delay type 2 diabetes.',
-        quiz: {
-          question: 'What percentage of body weight loss can help prevent or delay type 2 diabetes?',
-          options: ['1-2%', '3-5%', '5-7%', '10-15%'],
-          correct: 2
-        }
-      })
-    } else if (lessonId === 'lesson-2') {
-      setCurrentLessonData({
-        title: 'Heart Health Basics',
-        content: 'Heart disease is the leading cause of death worldwide. However, many forms of heart disease are preventable with lifestyle changes.\n\nKey heart-healthy habits include:\n1. Eating a balanced diet rich in fruits and vegetables\n2. Exercising regularly (at least 150 minutes per week)\n3. Maintaining a healthy weight\n4. Managing stress through relaxation techniques\n5. Getting enough sleep (7-9 hours per night)\n6. Avoiding tobacco products\n7. Limiting alcohol consumption',
-        quiz: {
-          question: 'How much weekly exercise is recommended for heart health?',
-          options: ['30 minutes', '60 minutes', '150 minutes', '300 minutes'],
-          correct: 2
-        }
-      })
-    } else if (lessonId === 'lesson-3') {
-      setCurrentLessonData({
-        title: 'Nutrition Fundamentals',
-        content: 'Proper nutrition is essential for maintaining good health and preventing chronic diseases. A balanced diet includes:\n\n• Carbohydrates: Your body\'s main source of energy\n• Proteins: Essential for building and repairing tissues\n• Fats: Important for brain function and hormone production\n• Vitamins and minerals: Support various bodily functions\n• Fiber: Promotes digestive health\n\nTips for healthy eating:\n1. Choose whole grains over refined grains\n2. Eat plenty of fruits and vegetables\n3. Limit added sugars and salt\n4. Drink water instead of sugary beverages\n5. Practice portion control',
-        quiz: {
-          question: 'Which of the following is recommended for healthy eating?',
-          options: ['Choose refined grains', 'Limit fruits and vegetables', 'Drink water instead of sugary beverages', 'Increase added sugars'],
-          correct: 2
-        }
-      })
-    } else {
-      setCurrentLessonData({
-        title: 'Diabetes Prevention',
-        content: 'Diabetes is a chronic condition that affects how your body turns food into energy. Most of the food you eat is broken down into sugar (glucose) and released into your bloodstream. When your blood sugar goes up, it signals your pancreas to release insulin. Insulin acts like a key to let the blood sugar into your body\'s cells for use as energy.\n\nPreventing diabetes involves maintaining a healthy weight, eating a balanced diet, and getting regular physical activity. Even modest weight loss - about 5 to 7 percent of your body weight - can help prevent or delay type 2 diabetes.',
-        quiz: {
-          question: 'What is the primary function of insulin in the body?',
-          options: ['Break down carbohydrates', 'Regulate blood sugar levels', 'Build muscle tissue', 'Control heart rate'],
-          correct: 1
-        }
-      })
-    }
-  }
-
-  const handleQuizAnswer = (index: number) => {
-    setQuizAnswer(index)
-    
-    if (index === currentLessonData?.quiz.correct) {
-      setQuizResult('correct')
-      // Award points
-      const pointsEarned = 20
-      completeLesson(currentLesson || 'default', 100)
-      setTimeout(() => {
-        alert(`Correct! You earned ${pointsEarned} points!`)
-        setCurrentLesson(null)
-      }, 1000)
-    } else {
-      setQuizResult('incorrect')
-      setTimeout(() => {
-        setQuizResult(null)
-        setQuizAnswer(null)
-      }, 2000)
-    }
-  }
-
-  const closeLesson = () => {
-    setCurrentLesson(null)
-    setCurrentLessonData(null)
-  }
-
-  const achievementsList = achievements.map(a => ({
-    id: a.id,
-    title: a.title,
-    description: a.description,
-    unlocked: a.unlocked,
-    date: a.dateUnlocked,
-    points: a.points
-  }))
+  const totalPts = userPoints || 840
+  const milestoneTarget = 1000
+  const pointsRemaining = Math.max(0, milestoneTarget - totalPts)
+  const milestonePercent = Math.min(100, Math.round((totalPts / milestoneTarget) * 100))
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.3 }}
-      className="max-w-7xl mx-auto"
-    >
-      <div className="flex items-center justify-between mb-8">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12 font-sans animate-in fade-in duration-200">
+      
+      {/* Top Header Row matching Reference Screenshot */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-serif font-bold text-forest-green">Learning Progress</h1>
-          <p className="text-text-secondary">Track your health education journey</p>
+          <p className="text-[11px] font-bold text-[#829489] uppercase tracking-wider">
+            PATIENT ENGAGEMENT / SCORES & ACHIEVEMENTS
+          </p>
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-serif font-bold text-[#1B3E2F] tracking-tight mt-0.5">
+            Look how far your curiosity has taken you.
+          </h1>
+          <p className="text-xs text-[#5A6D62] mt-0.5">
+            Celebrate your learning activity, revisit a lesson and choose your next small step.
+          </p>
         </div>
-        <motion.div 
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className="flex items-center space-x-3 px-6 py-3 bg-yellow-50 text-white rounded-lg border border-yellow-200 shadow-card hover:shadow-card-hover"
-        >
-          <TrophyIcon className="w-6 h-6" />
-          <div>
-            <div className="font-bold text-xl">{stats.totalPoints}</div>
-            <div className="text-xs opacity-90">Total Points</div>
-          </div>
-        </motion.div>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={() => navigate('/patient/medical-research')}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-[#E2ECE4] text-xs font-semibold text-[#1B3E2F] hover:bg-[#EFF5EE] transition-colors shadow-2xs"
+          >
+            <BookOpen className="w-4 h-4 text-forest-green" />
+            <span>Learning library</span>
+          </button>
+        </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <motion.div 
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className="bg-white p-4 rounded-lg shadow-card hover:shadow-card-hover border border-pale-sage"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2 bg-green-100 text-green-600 rounded-lg">
-              <CheckCircleIcon className="w-5 h-5" />
-            </div>
-            <span className="text-sm text-green-500 font-medium">+8 lessons</span>
+      {/* 4 Stat Cards matching Reference Screenshot */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Learning score */}
+        <div className="bg-white border border-[#E2ECE4] rounded-3xl p-5 sm:p-6 shadow-2xs">
+          <div className="flex items-center space-x-2 text-xs font-semibold text-[#5A6D62] mb-1">
+            <Trophy className="w-4 h-4 text-amber-600" />
+            <span>Learning score</span>
           </div>
-          <div className="text-3xl font-bold text-forest-green mb-1">{stats.completedLessons}</div>
-          <div className="text-sm text-text-secondary">Lessons Completed</div>
-        </motion.div>
+          <p className="text-3xl sm:text-4xl font-serif font-bold text-[#1B3E2F]">
+            {totalPts}
+          </p>
+          <p className="text-[11px] text-[#829489] font-medium mt-1">
+            Points earned through learning
+          </p>
+        </div>
 
-        <motion.div 
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className="bg-white p-4 rounded-lg shadow-card hover:shadow-card-hover border border-pale-sage"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2 bg-yellow-100 text-yellow-600 rounded-lg">
-              <FireIcon className="w-5 h-5" />
-            </div>
+        {/* Card 2: Lessons completed */}
+        <div className="bg-white border border-[#E2ECE4] rounded-3xl p-5 sm:p-6 shadow-2xs">
+          <div className="flex items-center space-x-2 text-xs font-semibold text-[#5A6D62] mb-1">
+            <GraduationCap className="w-4 h-4 text-emerald-700" />
+            <span>Lessons completed</span>
           </div>
-          <div className="text-3xl font-bold text-forest-green mb-1">{stats.currentStreak}</div>
-          <div className="text-sm text-text-secondary">Day Streak</div>
-        </motion.div>
+          <p className="text-3xl sm:text-4xl font-serif font-bold text-[#1B3E2F]">
+            03
+          </p>
+          <p className="text-[11px] text-[#829489] font-medium mt-1">
+            Of 5 in Everyday wellbeing
+          </p>
+        </div>
 
-        <motion.div 
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className="bg-white p-4 rounded-lg shadow-card hover:shadow-card-hover border border-pale-sage"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-              <ArrowTrendingUpIcon className="w-5 h-5" />
-            </div>
-            <span className="text-sm text-blue-500 font-medium">+5%</span>
+        {/* Card 3: Achievements */}
+        <div className="bg-white border border-[#E2ECE4] rounded-3xl p-5 sm:p-6 shadow-2xs">
+          <div className="flex items-center space-x-2 text-xs font-semibold text-[#5A6D62] mb-1">
+            <Award className="w-4 h-4 text-forest-green" />
+            <span>Achievements</span>
           </div>
-          <div className="text-3xl font-bold text-forest-green mb-1">{stats.quizAverage}%</div>
-          <div className="text-sm text-text-secondary">Quiz Average</div>
-        </motion.div>
+          <p className="text-3xl sm:text-4xl font-serif font-bold text-[#1B3E2F]">
+            03
+          </p>
+          <p className="text-[11px] text-[#829489] font-medium mt-1">
+            One more within reach
+          </p>
+        </div>
 
-        <motion.div 
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className="bg-white p-4 rounded-lg shadow-card hover:shadow-card-hover border border-pale-sage"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2 bg-purple-100 text-purple-600 rounded-lg">
-              <ClockIcon className="w-5 h-5" />
-            </div>
+        {/* Card 4: Best quiz score */}
+        <div className="bg-white border border-[#E2ECE4] rounded-3xl p-5 sm:p-6 shadow-2xs">
+          <div className="flex items-center space-x-2 text-xs font-semibold text-[#5A6D62] mb-1">
+            <Sparkles className="w-4 h-4 text-blue-600" />
+            <span>Best quiz score</span>
           </div>
-          <div className="text-3xl font-bold text-forest-green mb-1">{stats.timeLearned}h</div>
-          <div className="text-sm text-text-secondary">Time Learned</div>
-        </motion.div>
+          <p className="text-3xl sm:text-4xl font-serif font-bold text-[#1B3E2F]">
+            90%
+          </p>
+          <p className="text-[11px] text-[#829489] font-medium mt-1">
+            Sleep Basics • 9 / 10
+          </p>
+        </div>
       </div>
 
-      {/* Learning Bar */}
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.1 }}
-        className="bg-white rounded-lg shadow-card hover:shadow-card-hover p-8 border border-pale-sage mb-8"
-      >
-        <h2 className="text-xl font-serif font-bold mb-6 text-forest-green">Learning Goal Progress</h2>
+      {/* Main Grid: Left Path & Achievements (8 cols) & Right Profile (4 cols) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-7">
         
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <div className="text-4xl font-bold mb-1 text-forest-green">24/30</div>
-            <div className="text-sm text-text-secondary">Lessons to Complete This Month</div>
-          </div>
-          <div className="text-right">
-            <div className="text-3xl font-bold mb-1 text-forest-green">80%</div>
-            <div className="text-sm text-text-secondary">Monthly Progress</div>
-          </div>
-        </div>
+        {/* Left Column (8 cols) */}
+        <div className="lg:col-span-8 space-y-6">
+          
+          {/* Card: Your current learning path */}
+          <div className="bg-[#FAF9F5] border border-[#E2ECE4] rounded-3xl p-6 sm:p-7 shadow-2xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold text-[#829489] uppercase tracking-wider">
+                  YOUR CURRENT LEARNING PATH
+                </p>
+                <h3 className="text-2xl font-serif font-bold text-[#1B3E2F] mt-1">
+                  Everyday wellbeing
+                </h3>
+                <p className="text-xs text-[#5A6D62] mt-0.5">
+                  Care literacy, movement, sleep and balanced eating.
+                </p>
+              </div>
 
-        {/* Progress Bar */}
-        <div className="w-full bg-light-green rounded-full h-4 mb-6 border border-pale-sage">
-          <motion.div 
-            initial={{ width: 0 }}
-            animate={{ width: '80%' }}
-            transition={{ duration: 1 }}
-            className="bg-gradient-to-r from-green-400 to-green-500 h-4 rounded-full"
-          >
-            <div className="h-full w-full rounded-full bg-gradient-to-r from-green-300 to-green-400 animate-pulse"></div>
-          </motion.div>
-        </div>
-
-        <div className="flex items-center justify-between text-sm text-text-secondary">
-          <span>Started: Oct 1, 2024</span>
-          <span>Goal: Nov 1, 2024</span>
-          <span>Estimated: 7 days remaining</span>
-        </div>
-      </motion.div>
-
-      {/* Navigation Tabs */}
-      <div className="mb-8">
-        <div className="flex items-center space-x-2 bg-warm-cream p-2 rounded-lg">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`flex-1 px-6 py-3 rounded-lg font-medium transition-colors ${
-              activeTab === 'overview' 
-                ? 'bg-forest-green text-white shadow-card hover:shadow-card-hover' 
-                : 'bg-warm-cream/50 text-text-secondary hover:bg-warm-cream'
-            }`}
-          >
-            Overview
-          </button>
-          <button
-            onClick={() => setActiveTab('history')}
-            className={`flex-1 px-6 py-3 rounded-lg font-medium transition-colors ${
-              activeTab === 'history' 
-                ? 'bg-forest-green text-white shadow-card hover:shadow-card-hover'
-                : 'bg-warm-cream/50 text-text-secondary hover:bg-warm-cream'
-            }`}
-          >
-            History
-          </button>
-          <button
-            onClick={() => setActiveTab('achievements')}
-            className={`flex-1 px-6 py-3 rounded-lg font-medium transition-colors ${
-              activeTab === 'achievements' 
-                ? 'bg-forest-green text-white shadow-card hover:shadow-card-hover'
-                : 'bg-warm-cream/50 text-text-secondary hover:bg-warm-cream'
-            }`}
-          >
-            Achievements
-          </button>
-        </div>
-      </div>
-
-      {activeTab === 'overview' && (
-        <div className="space-y-6">
-          {/* Recent Activity */}
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="bg-white rounded-lg shadow-card hover:shadow-card-hover p-6 border border-pale-sage"
-          >
-            <h3 className="text-lg font-serif font-bold mb-4 text-forest-green">Recent Activity</h3>
-            <div className="space-y-4">
-              {completedLessons.slice(0, 4).map((lesson, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.3 + index * 0.05 }}
-                  className="flex items-center justify-between p-4 bg-light-green rounded-lg hover:shadow-card transition-shadow cursor-pointer"
-                  onClick={() => startLesson(lesson.id)}
-                >
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-green-100 text-green-600 rounded-lg flex items-center justify-center">
-                      <BookOpenIcon className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-forest-green">{lesson.title}</h4>
-                      <div className="flex items-center space-x-3 text-sm text-text-secondary mt-1">
-                        <span>{lesson.date}</span>
-                        <span>•</span>
-                        <span>{lesson.duration}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-lg font-bold text-green-500">{lesson.score}%</div>
-                    <div className="text-xs text-green-500 font-medium">Completed</div>
-                  </div>
-                </motion.div>
-              ))}
+              <button
+                onClick={() => navigate('/patient/health-games')}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-forest-green hover:bg-forest-green/90 text-white text-xs font-bold transition-all shadow-xs self-start sm:self-auto"
+              >
+                <span>Resume lesson</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
             </div>
-          </motion.div>
 
-          {/* Points History */}
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
-            className="bg-white rounded-lg shadow-card hover:shadow-card-hover p-6 border border-pale-sage"
-          >
-            <h3 className="text-lg font-serif font-bold mb-4 text-forest-green">Points History</h3>
-            <div className="space-y-3">
-              {[150, 120, 140, 100, 130].map((points, index) => (
-                <motion.div
-                  key={index}
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={{ scale: 0.99 }}
-                  className="flex items-center justify-between p-3 border-b border-light-green last:border-0 cursor-pointer"
-                  onClick={() => alert('View details - Feature not implemented')}
-                >
-                  <span className="text-sm text-text-secondary">
-                    {['Oct 10', 'Oct 08', 'Oct 05', 'Oct 02', 'Sep 28'][index]}
-                  </span>
-                  <div className="flex items-center space-x-4">
-                    <span className="font-bold text-green-500">+{points} pts</span>
-                    <span className="text-sm text-text-secondary">
-                      Total: {2850 - [150, 120, 140, 100, 130].slice(0, index + 1).reduce((a, b) => a + b, 0)} pts
-                    </span>
-                  </div>
-                </motion.div>
-              ))}
+            {/* Stepped Progress Indicator matching screenshot */}
+            <div className="space-y-2 pt-2">
+              <div className="grid grid-cols-5 gap-2.5">
+                <div className="h-2 rounded-full bg-forest-green" />
+                <div className="h-2 rounded-full bg-forest-green" />
+                <div className="h-2 rounded-full bg-forest-green" />
+                <div className="h-2 rounded-full bg-[#E2ECE4]" />
+                <div className="h-2 rounded-full bg-[#E2ECE4]" />
+              </div>
+              <p className="text-xs text-[#5A6D62] font-medium">
+                3 of 5 complete • Balanced eating basics is in progress
+              </p>
             </div>
-          </motion.div>
-        </div>
-      )}
-
-      {activeTab === 'history' && (
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="bg-white rounded-lg shadow-card hover:shadow-card-hover overflow-hidden border border-pale-sage"
-        >
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-light-green">
-                <tr>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-forest-green">Lesson</th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-forest-green">Date</th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-forest-green">Duration</th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-forest-green">Score</th>
-                  <th className="text-center py-4 px-6 text-sm font-medium text-forest-green">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-light-green">
-                {completedLessons.map((lesson) => (
-                  <motion.tr
-                    key={lesson.id}
-                    whileHover={{ backgroundColor: '#f3f4f6' }}
-                    className="cursor-pointer"
-                    onClick={() => startLesson(lesson.id)}
-                  >
-                    <td className="py-4 px-6 font-medium text-forest-green">{lesson.title}</td>
-                    <td className="py-4 px-6 text-sm text-text-secondary">{lesson.date}</td>
-                    <td className="py-4 px-6 text-sm text-text-secondary">{lesson.duration}</td>
-                    <td className="py-4 px-6 text-sm font-bold text-green-500">{lesson.score}%</td>
-                    <td className="py-4 px-6 text-center">
-                      <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
-                        Completed
-                      </span>
-                    </td>
-                  </motion.tr>
-                ))}
-              </tbody>
-            </table>
           </div>
-        </motion.div>
-      )}
 
-      {activeTab === 'achievements' && (
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="space-y-4"
-        >
-          {achievementsList.map((achievement, index) => (
-            <motion.div
-              key={achievement.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 + index * 0.05 }}
-              className={`flex items-center justify-between p-6 rounded-lg border ${
-                achievement.unlocked 
-                  ? 'bg-yellow-50 text-gray-800 shadow-card hover:shadow-card-hover border-yellow-200' 
-                  : 'bg-white border-gray-200 shadow-sm'
-              }`}
-            >
-              <div className="flex items-center space-x-4">
-                <div className={`w-16 h-16 rounded-xl flex items-center justify-center ${
-                  achievement.unlocked 
-                    ? 'bg-yellow-100 text-yellow-600' 
-                    : 'bg-gray-50 text-gray-400'
-                }`}>
-                  <AcademicCapIcon className="w-8 h-8" />
+          {/* Section: Achievements Cards */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-serif font-bold text-xl text-[#1B3E2F]">
+                Achievements
+              </h3>
+              <button 
+                onClick={() => navigate('/patient/health-games')}
+                className="text-xs font-semibold text-forest-green hover:underline flex items-center gap-1"
+              >
+                <span>All badges</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+              {/* Badge 1 */}
+              <div className="bg-[#EFF5EE] border border-pale-sage rounded-2xl p-4 text-center space-y-2 shadow-2xs">
+                <div className="w-10 h-10 rounded-2xl bg-white border border-[#E2ECE4] flex items-center justify-center text-forest-green mx-auto shadow-2xs">
+                  <Footprints className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-xl text-forest-green">{achievement.title}</h3>
-                  <p className="text-sm text-text-secondary">{achievement.description}</p>
-                  {achievement.unlocked && (
-                    <div className="flex items-center space-x-2 mt-2">
-                      <CheckCircleIcon className="w-4 h-4 text-green-500" />
-                      <span className="text-sm text-text-secondary">Unlocked on {achievement.date}</span>
-                    </div>
-                  )}
+                  <h4 className="font-serif font-bold text-xs text-[#1E2D25]">First Step</h4>
+                  <p className="text-[10px] text-[#5A6D62] mt-0.5">Complete your first lesson</p>
                 </div>
-              </div>
-              {achievement.unlocked && (
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm font-bold text-yellow-700">{achievement.date}</span>
-                  <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
-                    <StarIcon className="w-5 h-5 text-yellow-600" />
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          ))}
-        </motion.div>
-      )}
-
-      {/* Quick Actions */}
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.4 }}
-        className="mt-8"
-      >
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => {
-            if (completedLessons.length === 0) {
-              startLesson('lesson-1')
-            } else {
-              startLesson('lesson-1')
-            }
-          }}
-          className="w-full py-4 bg-forest-green text-white rounded-lg font-bold hover:bg-green-600 transition-all shadow-card hover:shadow-card-hover"
-        >
-          <PlayIcon className="w-5 h-5 inline mr-2" />
-          Start New Lesson
-        </motion.button>
-      </motion.div>
-
-      {/* Lesson Modal */}
-      <AnimatePresence>
-        {currentLesson && currentLessonData && !quizResult && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-pale-sage"
-            >
-              <div className="p-6 border-b border-light-green sticky top-0 bg-white z-10">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-serif font-bold text-forest-green">{currentLessonData.title}</h2>
-                  <motion.button 
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={closeLesson}
-                    className="w-10 h-10 bg-warm-cream rounded-full flex items-center justify-center hover:bg-gray-200 border border-gray-200"
-                  >
-                    <span className="text-xl font-bold text-gray-600">×</span>
-                  </motion.button>
-                </div>
+                <span className="inline-block text-[10px] font-bold text-emerald-800 bg-white px-2 py-0.5 rounded-full border border-emerald-200">
+                  Earned 08 Oct
+                </span>
               </div>
 
-              <div className="p-8">
-                <div className="mb-6">
-                  <div className="w-full bg-light-green rounded-full h-2 mb-4">
-                    <motion.div 
-                      initial={{ width: 0 }}
-                      animate={{ width: `${lessonProgress}%` }}
-                      className="bg-forest-green h-2 rounded-full"
-                    />
-                  </div>
-                  <p className="text-sm text-text-secondary mb-4">Lesson Progress: {lessonProgress}%</p>
+              {/* Badge 2 */}
+              <div className="bg-[#EFF5EE] border border-pale-sage rounded-2xl p-4 text-center space-y-2 shadow-2xs">
+                <div className="w-10 h-10 rounded-2xl bg-white border border-[#E2ECE4] flex items-center justify-center text-forest-green mx-auto shadow-2xs">
+                  <BookOpen className="w-5 h-5" />
                 </div>
-
-                <div className="space-y-6">
-                  <div className="p-4 bg-light-green rounded-lg border border-pale-sage">
-                    <h3 className="font-serif font-bold mb-2 text-forest-green">Lesson Content</h3>
-                    <p className="text-text-secondary leading-relaxed whitespace-pre-line">
-                      {currentLessonData.content}
-                    </p>
-                  </div>
-
-                  <div className="p-4 bg-pale-sage/30 rounded-lg border border-pale-sage">
-                    <h3 className="font-serif font-bold mb-4 text-forest-green">
-                      {currentLessonData.quiz.question}
-                    </h3>
-                    <div className="grid grid-cols-1 gap-3">
-                      {currentLessonData.quiz.options.map((option, index) => (
-                        <motion.button
-                          key={index}
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => quizAnswer === null && handleQuizAnswer(index)}
-                          className={`p-4 text-left rounded-lg transition-colors ${
-                            quizAnswer === index
-                              ? quizResult === 'correct'
-                                ? 'bg-green-100 border-2 border-green-500'
-                                : 'bg-red-100 border-2 border-red-500'
-                              : quizAnswer !== null && index === currentLessonData.quiz.correct
-                                ? 'bg-green-100 border-2 border-green-500'
-                                : quizAnswer !== null && index !== currentLessonData.quiz.correct
-                                  ? 'opacity-50'
-                                  : 'bg-white border border-gray-200 hover:bg-light-green'
-                          }`}
-                        >
-                          {option}
-                        </motion.button>
-                      ))}
-                    </div>
-                  </div>
+                <div>
+                  <h4 className="font-serif font-bold text-xs text-[#1E2D25]">Curious Mind</h4>
+                  <p className="text-[10px] text-[#5A6D62] mt-0.5">Read two research summaries</p>
                 </div>
+                <span className="inline-block text-[10px] font-bold text-emerald-800 bg-white px-2 py-0.5 rounded-full border border-emerald-200">
+                  Earned 10 Oct
+                </span>
               </div>
 
-              {quizResult === 'correct' && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="p-6 bg-green-50 border-t border-green-200 text-center"
-                >
-                  <div className="text-4xl mb-2">🎉</div>
-                  <h3 className="text-xl font-serif font-bold text-green-600 mb-2">Excellent!</h3>
-                  <p className="text-text-secondary">You've completed this lesson and earned points!</p>
-                </motion.div>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              {/* Badge 3 */}
+              <div className="bg-[#EFF5EE] border border-pale-sage rounded-2xl p-4 text-center space-y-2 shadow-2xs">
+                <div className="w-10 h-10 rounded-2xl bg-white border border-[#E2ECE4] flex items-center justify-center text-forest-green mx-auto shadow-2xs">
+                  <Moon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-serif font-bold text-xs text-[#1E2D25]">Sleep Savvy</h4>
+                  <p className="text-[10px] text-[#5A6D62] mt-0.5">Finish the sleep basics quiz</p>
+                </div>
+                <span className="inline-block text-[10px] font-bold text-emerald-800 bg-white px-2 py-0.5 rounded-full border border-emerald-200">
+                  Earned 12 Oct
+                </span>
+              </div>
 
-      {/* Celebration Modal */}
-      <AnimatePresence>
-        {quizResult === 'correct' && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4"
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              className="bg-white rounded-xl p-8 max-w-md text-center shadow-2xl"
-            >
-              <div className="text-6xl mb-4">🏆</div>
-              <h2 className="text-2xl font-serif font-bold text-forest-green mb-2">Congratulations!</h2>
-              <p className="text-text-secondary mb-6">You've completed a lesson and earned 20 points!</p>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => {
-                  // Reset all state and start fresh lesson
-                  setCurrentLesson(null)
-                  setCurrentLessonData(null)
-                  setLessonProgress(0)
-                  setQuizAnswer(null)
-                  setQuizResult(null)
-                  setTimeout(() => {
-                    startLesson('lesson-1')
-                  }, 100)
-                }}
-                className="px-6 py-3 bg-forest-green text-white rounded-lg font-medium hover:bg-green-600"
+              {/* Badge 4 - Locked / In Progress */}
+              <div className="bg-white border border-[#E2ECE4] rounded-2xl p-4 text-center space-y-2 shadow-2xs opacity-90">
+                <div className="w-10 h-10 rounded-2xl bg-[#FAF9F5] border border-[#E2ECE4] flex items-center justify-center text-[#5A6D62] mx-auto shadow-2xs">
+                  <Apple className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-serif font-bold text-xs text-[#1E2D25]">Nutrition Explorer</h4>
+                  <p className="text-[10px] text-[#5A6D62] mt-0.5">Finish the balanced eating quiz</p>
+                </div>
+                <span className="inline-block text-[10px] font-bold text-[#5A6D62] bg-[#FAF9F5] px-2 py-0.5 rounded-full border border-[#E2ECE4]">
+                  3 of 5 questions
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Quiz Scores Table matching Screenshot */}
+          <div className="bg-white border border-[#E2ECE4] rounded-3xl p-6 sm:p-7 shadow-2xs space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E2ECE4]">
+              <h3 className="font-serif font-bold text-xl text-[#1B3E2F]">
+                Quiz scores
+              </h3>
+              <button 
+                onClick={() => navigate('/patient/health-games')}
+                className="text-xs font-semibold text-forest-green hover:underline flex items-center gap-1"
               >
-                Continue Learning
-              </motion.button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+                <span>View history</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-[#E2ECE4] text-[#829489] uppercase tracking-wider text-[10px]">
+                    <th className="pb-3 font-bold">Quiz</th>
+                    <th className="pb-3 font-bold">Status</th>
+                    <th className="pb-3 font-bold">Result</th>
+                    <th className="pb-3 font-bold text-right">Points</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E2ECE4]/60">
+                  <tr className="hover:bg-[#FAF9F5] transition-colors">
+                    <td className="py-3.5 font-bold text-[#1E2D25]">Balanced Eating Challenge</td>
+                    <td className="py-3.5 text-emerald-800 font-semibold">In progress</td>
+                    <td className="py-3.5 text-[#5A6D62]">3 / 5 answered</td>
+                    <td className="py-3.5 font-serif font-bold text-base text-[#1E2D25] text-right">240 pts</td>
+                  </tr>
+                  <tr className="hover:bg-[#FAF9F5] transition-colors">
+                    <td className="py-3.5 font-bold text-[#1E2D25]">Sleep Basics Quiz</td>
+                    <td className="py-3.5 text-[#5A6D62]">Completed • 12 Oct</td>
+                    <td className="py-3.5 text-[#5A6D62]">9 / 10 correct</td>
+                    <td className="py-3.5 font-serif font-bold text-base text-[#1E2D25] text-right">180 pts</td>
+                  </tr>
+                  <tr className="hover:bg-[#FAF9F5] transition-colors">
+                    <td className="py-3.5 font-bold text-[#1E2D25]">Movement Knowledge Check</td>
+                    <td className="py-3.5 text-[#5A6D62]">Completed • 10 Oct</td>
+                    <td className="py-3.5 text-[#5A6D62]">8 / 10 correct</td>
+                    <td className="py-3.5 font-serif font-bold text-base text-[#1E2D25] text-right">160 pts</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p className="text-[11px] text-[#829489] pt-2 border-t border-[#E2ECE4]/60">
+              Total points also include completed lessons and reading activities.
+            </p>
+          </div>
+
+        </div>
+
+        {/* Right Column (4 cols): Profile & Goals matching Screenshot */}
+        <div className="lg:col-span-4 space-y-6">
+          
+          {/* Card 1: Your Learning Profile */}
+          <div className="bg-[#FAF9F5] border border-[#E2ECE4] rounded-3xl p-6 shadow-2xs space-y-4">
+            <p className="text-[10px] font-bold text-[#829489] uppercase tracking-wider">
+              YOUR LEARNING PROFILE
+            </p>
+
+            <div className="flex items-center space-x-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-white border border-[#E2ECE4] text-forest-green flex items-center justify-center font-serif font-bold text-lg shadow-2xs">
+                {initial}
+              </div>
+              <div>
+                <h4 className="font-serif font-bold text-lg text-[#1E2D25]">
+                  {displayName}
+                </h4>
+                <span className="inline-block mt-0.5 text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
+                  Curious learner
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-[#5A6D62] leading-relaxed">
+              Growing your understanding, one small step at a time.
+            </p>
+
+            {/* Next Milestone Box */}
+            <div className="pt-3 border-t border-[#E2ECE4] space-y-2">
+              <p className="text-[10px] font-bold text-[#829489] uppercase tracking-wider">
+                NEXT MILESTONE
+              </p>
+              <p className="text-2xl font-serif font-bold text-[#1B3E2F]">
+                {milestoneTarget.toLocaleString()} points
+              </p>
+
+              <div className="w-full h-2 rounded-full bg-[#E2ECE4] overflow-hidden">
+                <div
+                  className="h-full bg-forest-green transition-all duration-300"
+                  style={{ width: `${milestonePercent}%` }}
+                />
+              </div>
+
+              <p className="text-[11px] text-[#5A6D62] font-medium">
+                {totalPts} / {milestoneTarget} • {pointsRemaining} points to go
+              </p>
+            </div>
+
+            <button
+              onClick={() => navigate('/patient/health-games')}
+              className="w-full py-2.5 px-4 bg-forest-green hover:bg-forest-green/90 text-white rounded-xl text-xs font-bold transition-all shadow-xs text-center flex items-center justify-center gap-1.5"
+            >
+              <span>Continue my quiz</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Card 2: This Week's Rhythm & Weekly Goal */}
+          <div className="bg-white border border-[#E2ECE4] rounded-3xl p-6 shadow-2xs space-y-4">
+            <h4 className="font-serif font-bold text-base text-[#1E2D25]">
+              This week's rhythm
+            </h4>
+
+            {/* Day of Week circles matching screenshot */}
+            <div className="grid grid-cols-7 gap-1 text-center">
+              {['W', 'T', 'F', 'S', 'S', 'M', 'T'].map((day, i) => {
+                const isDone = i !== 2 && i !== 4
+                return (
+                  <div key={i} className="space-y-1">
+                    <span className="text-[10px] font-bold text-[#829489]">{day}</span>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center mx-auto text-xs font-bold ${
+                      isDone 
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
+                        : 'bg-[#FAF9F5] text-[#829489] border border-[#E2ECE4]'
+                    }`}>
+                      {isDone ? '✓' : '–'}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <p className="text-xs text-[#5A6D62] leading-relaxed">
+              5 learning days in the past week. Every visit to the library counts.
+            </p>
+
+            {/* Weekly Goal Pill */}
+            <div className="p-3.5 rounded-2xl bg-[#EFF5EE] border border-pale-sage flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <Target className="w-5 h-5 text-forest-green shrink-0" />
+                <div>
+                  <p className="text-xs font-bold text-[#1E2D25]">Your weekly goal</p>
+                  <p className="text-[11px] text-[#5A6D62]">3 learning activities • Goal reached</p>
+                </div>
+              </div>
+              <div className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                <Check className="w-3.5 h-3.5" />
+              </div>
+            </div>
+          </div>
+
+          {/* Disclaimer Note */}
+          <div className="p-4 rounded-2xl bg-[#FAF9F5] border border-[#E2ECE4] text-[11px] text-[#829489] leading-relaxed flex items-start space-x-2">
+            <span className="font-bold text-forest-green">ℹ</span>
+            <span>Scores and achievements celebrate learning, not health outcomes. They are not a clinical assessment or personalized medical advice.</span>
+          </div>
+
+        </div>
+      </div>
+    </div>
   )
 }
