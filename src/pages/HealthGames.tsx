@@ -1,36 +1,43 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { 
-  Trophy, 
-  Flame, 
-  Star, 
-  Gamepad2, 
-  Clock, 
-  Play, 
-  Check, 
-  X, 
-  Sparkles, 
-  Award, 
-  Target, 
-  Pill, 
-  Stethoscope, 
+import {
+  Trophy,
+  Flame,
+  Star,
+  Gamepad2,
+  Clock,
+  Play,
+  Check,
+  X,
+  Sparkles,
+  Award,
+  Target,
+  Pill,
   ChevronRight,
+  ChevronLeft,
   Brain,
   Apple,
-  ShieldAlert,
   ArrowRight,
   RotateCcw,
   Heart,
   Droplets,
   Dumbbell,
   Moon,
-  Smile,
   Activity,
   CheckCircle2,
-  CalendarCheck
+  CalendarCheck,
+  Volume2,
+  VolumeX,
+  Lock,
+  Zap,
+  Footprints,
+  BookOpen
 } from 'lucide-react'
 import { useData } from '../context/DataContext'
-import confetti from 'canvas-confetti'
+import GameArtwork, { GameArtKey } from '../components/games/GameArtwork'
+import PointsCelebration, { CelebrationEvent } from '../components/games/PointsCelebration'
+import AnimatedNumber from '../components/games/AnimatedNumber'
+import { playGameSound, GameSoundName } from '../components/games/gameSounds'
 
 interface QuizQuestion {
   id: number
@@ -43,27 +50,52 @@ interface QuizQuestion {
   points: number
 }
 
-interface GameDefinition {
+interface QuizGame {
   id: string
   title: string
   category: string
   difficulty: 'Easy' | 'Medium' | 'Hard'
   duration: string
-  plays: string
   description: string
   icon: any
   questions: QuizQuestion[]
 }
 
-// 1. Quiz Definitions
-const quizGamesData: GameDefinition[] = [
+interface MemoryCard {
+  uid: string
+  pairId: string
+  label: string
+  subLabel: string
+  iconName: 'apple' | 'heart' | 'droplet' | 'dumbbell' | 'moon' | 'brain'
+}
+
+interface ArcadeGame {
+  id: string
+  title: string
+  category: string
+  difficulty: 'Easy' | 'Medium' | 'Hard'
+  duration: string
+  description: string
+  pointsLabel: string
+  art: GameArtKey
+  tab: 'quiz' | 'memory' | 'habits'
+  quizId?: string
+  bestKey: string
+  icon: any
+}
+
+const todayKey = () => new Date().toISOString().slice(0, 10)
+
+// ============================================================
+// Quiz content (existing challenges preserved, Anatomy added)
+// ============================================================
+const quizGamesData: QuizGame[] = [
   {
     id: 'balanced-eating',
     title: 'Balanced Eating Challenge',
     category: 'Everyday wellbeing',
     difficulty: 'Easy',
     duration: '5 min',
-    plays: '3,420 plays',
     description: 'Master balanced nutrition groups, healthy plate portions, and glycemic control.',
     icon: Apple,
     questions: [
@@ -146,11 +178,10 @@ const quizGamesData: GameDefinition[] = [
   },
   {
     id: 'medicine-match',
-    title: 'Pharmacology Literacy',
+    title: 'Medicine Match',
     category: 'Medication Safety',
     difficulty: 'Medium',
     duration: '6 min',
-    plays: '1,542 plays',
     description: 'Learn safe indications, administration timings, and precautions for common clinical medications.',
     icon: Pill,
     questions: [
@@ -200,87 +231,326 @@ const quizGamesData: GameDefinition[] = [
         points: 80
       }
     ]
+  },
+  {
+    id: 'anatomy-puzzle',
+    title: 'Anatomy Challenge',
+    category: 'Human Anatomy',
+    difficulty: 'Hard',
+    duration: '8 min',
+    description: 'Identify organs, chambers and systems with an anatomy round built for curious minds.',
+    icon: Brain,
+    questions: [
+      {
+        id: 1,
+        question: 'Which chamber of the heart pumps oxygenated blood into the systemic circulation?',
+        category: 'Cardiovascular',
+        options: [
+          { key: 'A', text: 'Right atrium' },
+          { key: 'B', text: 'Right ventricle' },
+          { key: 'C', text: 'Left ventricle' },
+          { key: 'D', text: 'Left atrium' }
+        ],
+        correctKey: 'C',
+        explanationTitle: 'Correct! The left ventricle is the systemic pump.',
+        explanationText: 'It has the thickest myocardium because it must generate enough pressure to perfuse the entire body.',
+        points: 80
+      },
+      {
+        id: 2,
+        question: 'Which muscle separates the thoracic cavity from the abdominal cavity?',
+        category: 'Respiratory',
+        options: [
+          { key: 'A', text: 'Diaphragm' },
+          { key: 'B', text: 'Trapezius' },
+          { key: 'C', text: 'Biceps brachii' },
+          { key: 'D', text: 'Sartorius' }
+        ],
+        correctKey: 'A',
+        explanationTitle: 'Exactly. The diaphragm drives quiet breathing.',
+        explanationText: 'Its dome-shaped contraction creates negative intrathoracic pressure, drawing air into the lungs.',
+        points: 80
+      },
+      {
+        id: 3,
+        question: 'How many bones are typically present in an adult human skeleton?',
+        category: 'Skeletal System',
+        options: [
+          { key: 'A', text: '106' },
+          { key: 'B', text: '156' },
+          { key: 'C', text: '206' },
+          { key: 'D', text: '306' }
+        ],
+        correctKey: 'C',
+        explanationTitle: 'Correct — 206 bones.',
+        explanationText: 'Babies start with around 270 bones; many fuse during growth, leaving 206 in adulthood.',
+        points: 80
+      },
+      {
+        id: 4,
+        question: 'The largest organ of the human body is the:',
+        category: 'Integumentary',
+        options: [
+          { key: 'A', text: 'Liver' },
+          { key: 'B', text: 'Skin' },
+          { key: 'C', text: 'Lungs' },
+          { key: 'D', text: 'Small intestine' }
+        ],
+        correctKey: 'B',
+        explanationTitle: 'Yes! Skin is the largest organ.',
+        explanationText: 'Skin forms the body’s first immune and thermal barrier and accounts for roughly 15% of body weight.',
+        points: 80
+      }
+    ]
   }
 ]
 
-// 2. Memory Match Cards Definition
-interface MemoryCard {
-  uid: string
-  pairId: string
-  label: string
-  subLabel: string
-  iconName: 'apple' | 'heart' | 'droplet' | 'dumbbell' | 'moon' | 'brain'
-}
-
+// ============================================================
+// Memory cards
+// ============================================================
 const memoryCardPairs: Omit<MemoryCard, 'uid'>[] = [
   { pairId: 'p1', label: 'Fresh Fruit', subLabel: 'Natural Vitamins', iconName: 'apple' },
   { pairId: 'p1', label: 'Balanced Nutrition', subLabel: 'Dietary Fiber', iconName: 'apple' },
-
   { pairId: 'p2', label: 'Active Heart', subLabel: 'Blood Flow', iconName: 'heart' },
   { pairId: 'p2', label: 'Cardio Wellness', subLabel: 'Lower BP', iconName: 'heart' },
-
   { pairId: 'p3', label: 'Pure Water', subLabel: '2L Daily Goal', iconName: 'droplet' },
   { pairId: 'p3', label: 'Hydration Balance', subLabel: 'Vital Electrolytes', iconName: 'droplet' },
-
   { pairId: 'p4', label: 'Daily Movement', subLabel: '30-Min Walk', iconName: 'dumbbell' },
   { pairId: 'p4', label: 'Muscular Fitness', subLabel: 'Joint Mobility', iconName: 'dumbbell' },
-
   { pairId: 'p5', label: 'Restful Sleep', subLabel: '7-8 Hours', iconName: 'moon' },
   { pairId: 'p5', label: 'Cellular Recovery', subLabel: 'Immune Renewal', iconName: 'moon' },
-
   { pairId: 'p6', label: 'Mindful Breathing', subLabel: 'Stress Regulation', iconName: 'brain' },
-  { pairId: 'p6', label: 'Mental Wellness', subLabel: 'Vagal Reset', iconName: 'brain' },
+  { pairId: 'p6', label: 'Mental Wellness', subLabel: 'Vagal Reset', iconName: 'brain' }
 ]
+
+// ============================================================
+// Arcade catalogue (all existing games, clickable thumbnails)
+// ============================================================
+const ARCADE_GAMES: ArcadeGame[] = [
+  {
+    id: 'balanced-eating',
+    title: 'Balanced Eating Challenge',
+    category: 'Nutrition',
+    difficulty: 'Easy',
+    duration: '5 min',
+    description: 'Build the perfect plate, understand millets and master heart-smart nutrition choices.',
+    pointsLabel: 'Up to 450 pts',
+    art: 'nutrition',
+    tab: 'quiz',
+    quizId: 'balanced-eating',
+    bestKey: 'balanced-eating',
+    icon: Apple
+  },
+  {
+    id: 'medicine-match',
+    title: 'Medicine Match',
+    category: 'Medication Safety',
+    difficulty: 'Medium',
+    duration: '6 min',
+    description: 'Link medicines to their clinical actions, safe doses and essential precautions.',
+    pointsLabel: 'Up to 290 pts',
+    art: 'medicine',
+    tab: 'quiz',
+    quizId: 'medicine-match',
+    bestKey: 'medicine-match',
+    icon: Pill
+  },
+  {
+    id: 'anatomy-puzzle',
+    title: 'Anatomy Challenge',
+    category: 'Human Anatomy',
+    difficulty: 'Hard',
+    duration: '8 min',
+    description: 'Explore the heart, lungs, skeleton and skin through a focused anatomy quiz.',
+    pointsLabel: 'Up to 370 pts',
+    art: 'anatomy',
+    tab: 'quiz',
+    quizId: 'anatomy-puzzle',
+    bestKey: 'anatomy-puzzle',
+    icon: Brain
+  },
+  {
+    id: 'memory-match',
+    title: 'Medical Memory Match',
+    category: 'Memory & Focus',
+    difficulty: 'Easy',
+    duration: '4 min',
+    description: 'Flip cards and pair healthy habits with the physiology that powers them.',
+    pointsLabel: 'Up to 220 pts',
+    art: 'memory',
+    tab: 'memory',
+    bestKey: 'memory-match',
+    icon: Gamepad2
+  },
+  {
+    id: 'habit-challenge',
+    title: 'Daily Habit Challenge',
+    category: 'Healthy Routine',
+    difficulty: 'Easy',
+    duration: 'All day',
+    description: 'Check off six physician-recommended daily habits and keep your streak alive.',
+    pointsLabel: '85 pts daily',
+    art: 'habits',
+    tab: 'habits',
+    bestKey: 'habit-challenge',
+    icon: CalendarCheck
+  }
+]
+
+const ACHIEVEMENT_ICONS: Record<string, any> = {
+  footprints: Footprints,
+  book: BookOpen,
+  moon: Moon,
+  apple: Apple,
+  calendar: CalendarCheck,
+  brain: Brain,
+  star: Star,
+  gamepad: Gamepad2,
+  trophy: Trophy
+}
+
+function difficultyStyle(difficulty: ArcadeGame['difficulty']) {
+  if (difficulty === 'Easy') return 'bg-emerald-100/95 text-emerald-900 border-emerald-300/60'
+  if (difficulty === 'Medium') return 'bg-amber-100/95 text-amber-900 border-amber-300/60'
+  return 'bg-rose-100/95 text-rose-900 border-rose-300/60'
+}
 
 export default function HealthGames() {
   const navigate = useNavigate()
-  const { 
-    userPoints, 
-    userStreak, 
-    saveGameScore, 
+  const {
+    userPoints,
+    userStreak,
+    userScores,
+    gamePlayCounts,
+    recordGameResult,
+    awardPoints,
+    retractPoints,
     achievements,
-    completeLesson,
+    unlockAchievement,
     habits,
-    toggleHabit
+    toggleHabit,
+    soundEnabled,
+    toggleSound,
+    soundVolume,
+    setSoundVolume
   } = useData()
 
-  // Tab State: 'quiz' | 'memory' | 'habits'
+  // ---------------------------------------------------------
+  // Navigation / celebration / sound
+  // ---------------------------------------------------------
+  const [activeView, setActiveView] = useState<'hub' | 'play'>('hub')
   const [activeTab, setActiveTab] = useState<'quiz' | 'memory' | 'habits'>('quiz')
+  const [activeArcadeId, setActiveArcadeId] = useState<string>('balanced-eating')
 
-  // Floating Points Animation Notifications
-  const [floatingPoints, setFloatingPoints] = useState<{ id: number; text: string }[]>([])
+  const [celebration, setCelebration] = useState<CelebrationEvent | null>(null)
+  const celebrationQueue = useRef<CelebrationEvent[]>([])
+  const celebrationShowing = useRef(false)
+  const celebrationTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const triggerPointsAnimation = (text: string) => {
-    const id = Date.now() + Math.random()
-    setFloatingPoints(prev => [...prev, { id, text }])
-    setTimeout(() => {
-      setFloatingPoints(prev => prev.filter(p => p.id !== id))
-    }, 1800)
+  const runCelebrationQueue = () => {
+    const next = celebrationQueue.current.shift()
+    if (!next) {
+      celebrationShowing.current = false
+      setCelebration(null)
+      return
+    }
+    celebrationShowing.current = true
+    setCelebration(next)
+    celebrationTimer.current = setTimeout(
+      runCelebrationQueue,
+      next.type === 'points' ? 1550 : 2500
+    )
   }
 
-  // ==========================================
-  // GAME 1: HEALTH QUIZ STATE
-  // ==========================================
+  const enqueueCelebration = (event: Omit<CelebrationEvent, 'id'>) => {
+    celebrationQueue.current.push({ ...event, id: Date.now() + Math.random() })
+    if (!celebrationShowing.current) runCelebrationQueue()
+  }
+
+  useEffect(() => {
+    return () => {
+      if (celebrationTimer.current) clearTimeout(celebrationTimer.current)
+    }
+  }, [])
+
+  const sfx = (name: GameSoundName) => playGameSound(name, soundEnabled, soundVolume)
+
+  const celebrateAchievement = (achievementId: string) => {
+    const achievement = achievements.find(a => a.id === achievementId)
+    if (!unlockAchievement(achievementId)) return
+    sfx('achievement')
+    enqueueCelebration({
+      type: 'achievement',
+      points: 0,
+      title: achievement?.title || 'Achievement unlocked',
+      subtitle: achievement?.description || 'A new badge has joined your collection.'
+    })
+  }
+
+  const maybeUnlockArcadeRegular = (gameId: string) => {
+    const played = new Set(
+      Object.keys(gamePlayCounts).filter(id => (gamePlayCounts[id] || 0) > 0)
+    )
+    played.add(gameId)
+    if (played.size >= 3) celebrateAchievement('8')
+  }
+
+  // Point Collector milestone is earned by crossing 1,000 real points (not on page load)
+  const pointMilestoneInitialised = useRef(false)
+  useEffect(() => {
+    if (!pointMilestoneInitialised.current) {
+      pointMilestoneInitialised.current = true
+      return
+    }
+    if (userPoints >= 1000) celebrateAchievement('9')
+  }, [userPoints])
+
+  // ---------------------------------------------------------
+  // Quiz state
+  // ---------------------------------------------------------
   const [selectedGameId, setSelectedGameId] = useState<string>('balanced-eating')
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0)
   const [selectedOptionKey, setSelectedOptionKey] = useState<string | null>(null)
   const [isAnswerChecked, setIsAnswerChecked] = useState<boolean>(false)
   const [quizScore, setQuizScore] = useState<number>(0)
+  const [quizAwarded, setQuizAwarded] = useState<number>(0)
+  const [quizCorrectCount, setQuizCorrectCount] = useState<number>(0)
   const [correctInRow, setCorrectInRow] = useState<number>(0)
   const [showQuizComplete, setShowQuizComplete] = useState<boolean>(false)
   const [quizTimer, setQuizTimer] = useState<number>(30)
+  const [questionAward, setQuestionAward] = useState<number>(0)
+  const [roundBonus, setRoundBonus] = useState<number>(0)
+  const [roundTotal, setRoundTotal] = useState<number>(0)
 
-  const activeGame = quizGamesData.find(g => g.id === selectedGameId) || quizGamesData[0]
-  const currentQuestion = activeGame.questions[currentQuestionIndex] || activeGame.questions[0]
+  const activeQuiz = quizGamesData.find(g => g.id === selectedGameId) || quizGamesData[0]
+  const currentQuestion = activeQuiz.questions[currentQuestionIndex] || activeQuiz.questions[0]
+  const activeArcade = ARCADE_GAMES.find(g => g.id === activeArcadeId) || ARCADE_GAMES[0]
+  const activeBest = userScores[activeArcade.bestKey] || 0
 
   useEffect(() => {
-    if (activeTab === 'quiz' && !isAnswerChecked && !showQuizComplete) {
+    if (activeView === 'play' && activeTab === 'quiz' && !isAnswerChecked && !showQuizComplete) {
       const timer = setInterval(() => {
         setQuizTimer(prev => (prev > 0 ? prev - 1 : 0))
       }, 1000)
       return () => clearInterval(timer)
     }
-  }, [activeTab, isAnswerChecked, showQuizComplete, currentQuestionIndex])
+  }, [activeView, activeTab, isAnswerChecked, showQuizComplete, currentQuestionIndex])
+
+  const resetQuiz = (gameId: string = activeQuiz.id) => {
+    setSelectedGameId(gameId)
+    setCurrentQuestionIndex(0)
+    setSelectedOptionKey(null)
+    setIsAnswerChecked(false)
+    setQuizScore(0)
+    setQuizAwarded(0)
+    setQuizCorrectCount(0)
+    setCorrectInRow(0)
+    setShowQuizComplete(false)
+    setQuizTimer(30)
+    setQuestionAward(0)
+    setRoundBonus(0)
+    setRoundTotal(0)
+  }
 
   const handleSelectOption = (key: string) => {
     if (isAnswerChecked) return
@@ -289,45 +559,86 @@ export default function HealthGames() {
 
     const isCorrect = key === currentQuestion.correctKey
     if (isCorrect) {
-      const pts = currentQuestion.points || 80
-      setQuizScore(prev => prev + pts)
+      const points = currentQuestion.points || 80
+      // Daily keys: replaying is welcome, but the same question cannot pay out twice today.
+      const awarded = awardPoints(points, {
+        uniqueKey: `quiz:${activeQuiz.id}:${currentQuestion.id}:${todayKey()}`,
+        gameId: activeQuiz.id,
+        reason: 'Correct quiz answer'
+      })
+      setQuizScore(prev => prev + points)
+      setQuizAwarded(prev => prev + awarded)
+      setQuizCorrectCount(prev => prev + 1)
       setCorrectInRow(prev => prev + 1)
-      saveGameScore(activeGame.id, pts)
-      triggerPointsAnimation(`+${pts} Points!`)
+      setQuestionAward(awarded)
+      if (awarded > 0) {
+        sfx('points')
+        enqueueCelebration({
+          type: 'points',
+          points: awarded,
+          title: 'Correct answer!',
+          subtitle: currentQuestion.explanationTitle
+        })
+      } else {
+        sfx('click')
+      }
     } else {
+      setQuestionAward(0)
       setCorrectInRow(0)
+      sfx('wrong')
     }
+  }
+
+  const finishQuiz = () => {
+    setShowQuizComplete(true)
+    const totalQuestions = activeQuiz.questions.length
+    const accuracy = Math.round((quizCorrectCount / totalQuestions) * 100)
+    const perfect = quizCorrectCount === totalQuestions
+
+    const result = recordGameResult(activeQuiz.id, quizScore + 50, {
+      completed: true,
+      bonusPoints: 50,
+      bonusKey: `quiz-complete:${activeQuiz.id}:${todayKey()}`
+    })
+
+    setRoundBonus(result.awarded)
+    setRoundTotal(quizAwarded + result.awarded)
+
+    sfx('level')
+    enqueueCelebration({
+      type: 'level',
+      points: result.awarded,
+      title: perfect ? 'Perfect round!' : 'Level complete!',
+      subtitle: `${quizCorrectCount}/${totalQuestions} correct • ${accuracy}% accuracy`
+    })
+
+    if (perfect) celebrateAchievement('7')
+    if (activeQuiz.id === 'balanced-eating') celebrateAchievement('4')
+    maybeUnlockArcadeRegular(activeQuiz.id)
   }
 
   const handleNextQuestion = () => {
-    if (currentQuestionIndex + 1 < activeGame.questions.length) {
+    if (currentQuestionIndex + 1 < activeQuiz.questions.length) {
       setCurrentQuestionIndex(prev => prev + 1)
       setSelectedOptionKey(null)
       setIsAnswerChecked(false)
+      setQuestionAward(0)
       setQuizTimer(30)
     } else {
-      setShowQuizComplete(true)
-      completeLesson(activeGame.id, quizScore + 80)
-      confetti({
-        particleCount: 80,
-        spread: 60,
-        origin: { y: 0.6 }
-      })
+      finishQuiz()
     }
   }
 
-  const handleRestartQuiz = () => {
-    setCurrentQuestionIndex(0)
-    setSelectedOptionKey(null)
-    setIsAnswerChecked(false)
-    setQuizScore(0)
-    setShowQuizComplete(false)
-    setQuizTimer(30)
+  const switchQuizTopic = () => {
+    const currentIndex = quizGamesData.findIndex(g => g.id === activeQuiz.id)
+    const next = quizGamesData[(currentIndex + 1) % quizGamesData.length]
+    resetQuiz(next.id)
+    sfx('click')
   }
 
-  // ==========================================
-  // GAME 2: MEMORY MATCH STATE
-  // ==========================================
+  // ---------------------------------------------------------
+  // Memory match state
+  // ---------------------------------------------------------
   const [memoryCards, setMemoryCards] = useState<MemoryCard[]>([])
   const [flippedIndices, setFlippedIndices] = useState<number[]>([])
   const [matchedPairs, setMatchedPairs] = useState<string[]>([])
@@ -335,6 +646,7 @@ export default function HealthGames() {
   const [memoryTimer, setMemoryTimer] = useState<number>(0)
   const [isMemoryActive, setIsMemoryActive] = useState<boolean>(false)
   const [memoryComplete, setMemoryComplete] = useState<boolean>(false)
+  const [memoryScore, setMemoryScore] = useState<number>(0)
 
   const initMemoryGame = () => {
     const shuffled = [...memoryCardPairs]
@@ -347,29 +659,28 @@ export default function HealthGames() {
     setMemoryTimer(0)
     setIsMemoryActive(true)
     setMemoryComplete(false)
+    setMemoryScore(0)
   }
 
   useEffect(() => {
-    if (activeTab === 'memory' && memoryCards.length === 0) {
-      initMemoryGame()
-    }
-  }, [activeTab])
-
-  useEffect(() => {
-    let interval: any = null
-    if (isMemoryActive && !memoryComplete && activeTab === 'memory') {
+    let interval: ReturnType<typeof setInterval> | null = null
+    if (isMemoryActive && !memoryComplete && activeView === 'play' && activeTab === 'memory') {
       interval = setInterval(() => {
         setMemoryTimer(t => t + 1)
       }, 1000)
     }
-    return () => clearInterval(interval)
-  }, [isMemoryActive, memoryComplete, activeTab])
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [isMemoryActive, memoryComplete, activeView, activeTab])
 
   const handleCardClick = (index: number) => {
+    if (!memoryCards[index]) return
     if (flippedIndices.length === 2) return
     if (flippedIndices.includes(index)) return
     if (matchedPairs.includes(memoryCards[index].pairId)) return
 
+    sfx('flip')
     const newFlipped = [...flippedIndices, index]
     setFlippedIndices(newFlipped)
 
@@ -379,28 +690,52 @@ export default function HealthGames() {
       const second = memoryCards[newFlipped[1]]
 
       if (first.pairId === second.pairId) {
-        // Matched!
+        const awarded = awardPoints(20, {
+          uniqueKey: `memory:${first.pairId}:${todayKey()}`,
+          gameId: 'memory-match',
+          reason: 'Matched pair'
+        })
         const updatedMatches = [...matchedPairs, first.pairId]
         setMatchedPairs(updatedMatches)
         setFlippedIndices([])
-        saveGameScore('memory-match', 20)
-        triggerPointsAnimation('+20 Points!')
+
+        let sessionScore = memoryScore
+        if (awarded > 0) {
+          sessionScore = memoryScore + awarded
+          setMemoryScore(sessionScore)
+          sfx('points')
+          enqueueCelebration({
+            type: 'points',
+            points: awarded,
+            title: 'Pair matched!',
+            subtitle: `${first.label} ↔ ${second.label}`
+          })
+        }
 
         if (updatedMatches.length === 6) {
           setIsMemoryActive(false)
           setMemoryComplete(true)
-          saveGameScore('memory-match', 100)
-          triggerPointsAnimation('+100 Bonus Completion!')
-          confetti({
-            particleCount: 100,
-            spread: 70,
-            origin: { y: 0.6 }
+          const finalScore = sessionScore + 100
+          const result = recordGameResult('memory-match', finalScore, {
+            completed: true,
+            bonusPoints: 100,
+            bonusKey: `memory-complete:${todayKey()}`
           })
+          setMemoryScore(sessionScore + result.awarded)
+          sfx('level')
+          enqueueCelebration({
+            type: 'level',
+            points: result.awarded,
+            title: 'All pairs matched!',
+            subtitle: `${attempts + 1} attempts • ${memoryTimer} seconds`
+          })
+          celebrateAchievement('6')
+          maybeUnlockArcadeRegular('memory-match')
         }
       } else {
-        // Not matched, flip back after 800ms
         setTimeout(() => {
           setFlippedIndices([])
+          sfx('wrong')
         }, 800)
       }
     }
@@ -418,169 +753,545 @@ export default function HealthGames() {
     }
   }
 
-  // ==========================================
-  // GAME 3: DAILY HEALTH HABIT CHALLENGE
-  // ==========================================
+  // ---------------------------------------------------------
+  // Habit challenge
+  // ---------------------------------------------------------
   const habitList = habits || []
   const completedHabitsCount = habitList.filter(h => h.completed).length
-  const habitPercent = Math.round((completedHabitsCount / Math.max(1, habitList.length)) * 100)
+  const habitPercent = Math.round(
+    (completedHabitsCount / Math.max(1, habitList.length)) * 100
+  )
 
-  const handleToggleHabitItem = (id: string) => {
-    const res = toggleHabit(id)
+  const handleToggleHabitItem = (habitId: string) => {
+    const habit = habitList.find(h => h.id === habitId)
+    const wasCompleted = Boolean(habit?.completed)
+    const res = toggleHabit(habitId)
+
     if (res.completed) {
-      triggerPointsAnimation('+10 Points!')
-      if (completedHabitsCount + 1 === habitList.length) {
-        confetti({
-          particleCount: 90,
-          spread: 65,
-          origin: { y: 0.6 }
+      const newCount = completedHabitsCount + 1
+      if (res.pointsEarned > 0) {
+        sfx('points')
+        enqueueCelebration({
+          type: 'points',
+          points: res.pointsEarned,
+          title: habit?.label || 'Habit complete!',
+          subtitle: habit?.detail || 'A healthy step forward.'
         })
       }
+
+      if (newCount === habitList.length) {
+        const bonus = awardPoints(25, {
+          uniqueKey: `habits-complete:${todayKey()}`,
+          gameId: 'habit-challenge',
+          reason: 'All daily habits completed'
+        })
+        recordGameResult('habit-challenge', 85, { completed: true })
+        if (bonus > 0) {
+          sfx('level')
+          enqueueCelebration({
+            type: 'level',
+            points: bonus,
+            title: 'Daily goal complete!',
+            subtitle: 'All six healthy habits checked today'
+          })
+        }
+        celebrateAchievement('5')
+        maybeUnlockArcadeRegular('habit-challenge')
+      }
+    } else {
+      if (wasCompleted) {
+        // Undo the all-habits bonus too, so unchecking cannot farm points.
+        retractPoints(25, `habits-complete:${todayKey()}`)
+      }
+      sfx('click')
     }
   }
 
-  return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12 font-sans relative">
-      
-      {/* Floating Points Animation Display */}
-      <div className="fixed top-24 right-8 z-50 pointer-events-none space-y-2">
-        {floatingPoints.map(item => (
-          <div
-            key={item.id}
-            className="bg-[#1B3E2F] text-white font-bold text-sm px-4 py-2 rounded-2xl shadow-xl border border-emerald-400 flex items-center gap-2 animate-in fade-in slide-in-from-bottom-4 duration-300"
-          >
-            <Sparkles className="w-4 h-4 text-emerald-300" />
-            <span>{item.text}</span>
-          </div>
-        ))}
-      </div>
+  // ---------------------------------------------------------
+  // Navigation helpers
+  // ---------------------------------------------------------
+  const openGame = (game: ArcadeGame) => {
+    setActiveArcadeId(game.id)
+    setActiveTab(game.tab)
+    if (game.tab === 'quiz' && game.quizId) resetQuiz(game.quizId)
+    if (game.tab === 'memory') initMemoryGame()
+    setActiveView('play')
+    sfx('click')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
-      {/* Top Header & Breadcrumb */}
-      <div>
-        <p className="text-[11px] font-bold text-[#829489] uppercase tracking-wider">
-          PATIENT ENGAGEMENT / INTERACTIVE HEALTH GAMES
-        </p>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-1">
+  const backToArcade = () => {
+    setActiveView('hub')
+    setCelebration(null)
+    celebrationQueue.current = []
+    celebrationShowing.current = false
+    if (celebrationTimer.current) clearTimeout(celebrationTimer.current)
+    sfx('click')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const currentRoundPoints =
+    activeTab === 'quiz'
+      ? quizAwarded + roundBonus
+      : activeTab === 'memory'
+      ? memoryScore
+      : completedHabitsCount * 10 + (completedHabitsCount === habitList.length ? 25 : 0)
+
+  const unlockedAchievements = achievements.filter(a => a.unlocked).length
+  const overallBest = Math.max(0, ...Object.values(userScores))
+  const displayName = 'Explorer'
+
+  const soundControls = (
+    <div className="bg-white border border-[#E2ECE4] rounded-3xl p-5 shadow-2xs space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-xl bg-[#EFF5EE] flex items-center justify-center text-[#1B3E2F]">
+            {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+          </div>
           <div>
-            <h1 className="text-3xl lg:text-4xl font-serif font-bold text-[#1B3E2F] tracking-tight">
-              Learn a little. Play a little.
-            </h1>
-            <p className="text-xs text-[#5A6D62] mt-0.5">
-              Turn clinical health principles into enjoyable, lasting habits through interactive games.
+            <p className="text-[10px] font-bold text-[#829489] uppercase tracking-wider">Game sounds</p>
+            <p className="text-xs font-bold text-[#1B3E2F]">
+              {soundEnabled ? 'Audio on' : 'Muted'}
             </p>
           </div>
+        </div>
+        <button
+          onClick={() => {
+            toggleSound()
+            if (!soundEnabled) playGameSound('click', true, soundVolume)
+          }}
+          className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-colors ${
+            soundEnabled
+              ? 'bg-[#EFF5EE] border-[#E2ECE4] text-[#1B3E2F] hover:bg-[#E4EFE4]'
+              : 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100'
+          }`}
+        >
+          {soundEnabled ? 'Mute' : 'Unmute'}
+        </button>
+      </div>
 
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-emerald-50 border border-[#E2ECE4] text-xs font-bold text-[#1B3E2F]">
-              <Flame className="w-4 h-4 text-amber-500" />
-              <span>{userStreak} Day Streak</span>
-            </span>
-            <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#EFF5EE] border border-[#E2ECE4] text-xs font-bold text-[#1B3E2F]">
-              <Trophy className="w-4 h-4 text-amber-600" />
-              <span>{userPoints} Total Pts</span>
-            </span>
-          </div>
+      <div className="flex items-center gap-3">
+        <VolumeX className="w-3.5 h-3.5 text-[#829489] shrink-0" />
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={Math.round(soundVolume * 100)}
+          onChange={e => setSoundVolume(Number(e.target.value) / 100)}
+          className="w-full accent-[#1B3E2F] h-1.5 cursor-pointer"
+          aria-label="Game sound volume"
+        />
+        <Volume2 className="w-3.5 h-3.5 text-[#829489] shrink-0" />
+        <span className="text-[11px] font-bold text-[#5A6D62] w-9 text-right">
+          {Math.round(soundVolume * 100)}%
+        </span>
+      </div>
+
+      <button
+        onClick={() => playGameSound('points', true, soundVolume)}
+        disabled={!soundEnabled}
+        className="w-full py-2 rounded-xl border border-[#E2ECE4] text-[11px] font-bold text-[#1B3E2F] hover:bg-[#EFF5EE] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+      >
+        Test reward chime
+      </button>
+    </div>
+  )
+
+  const achievementsCard = (
+    <div className="bg-white border border-[#E2ECE4] rounded-3xl p-5 shadow-2xs space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-bold text-[#829489] uppercase tracking-wider">
+          Achievements
+        </p>
+        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/70 px-2 py-0.5 rounded-full">
+          {unlockedAchievements}/{achievements.length}
+        </span>
+      </div>
+
+      <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+        {achievements.map(achievement => {
+          const Icon = ACHIEVEMENT_ICONS[achievement.icon || 'star'] || Award
+          return (
+            <div
+              key={achievement.id}
+              className={`flex items-start gap-2.5 p-2.5 rounded-2xl border transition-colors ${
+                achievement.unlocked
+                  ? 'bg-[#F3F8F0] border-emerald-200/80'
+                  : 'bg-[#FAF9F5] border-[#E2ECE4]'
+              }`}
+            >
+              <div
+                className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                  achievement.unlocked
+                    ? 'bg-[#1B3E2F] text-amber-300'
+                    : 'bg-white border border-[#E2ECE4] text-[#829489]'
+                }`}
+              >
+                {achievement.unlocked ? <Icon className="w-4 h-4" /> : <Lock className="w-3.5 h-3.5" />}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-[#1E2D25] leading-tight">
+                  {achievement.title}
+                </p>
+                <p className="text-[10px] text-[#5A6D62] leading-snug mt-0.5">
+                  {achievement.description}
+                </p>
+                <p className={`text-[9px] font-bold mt-1 ${
+                  achievement.unlocked ? 'text-emerald-700' : 'text-[#829489]'
+                }`}>
+                  {achievement.unlocked ? achievement.dateUnlocked : 'Locked'}
+                </p>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+
+  const progressCard = (
+    <div className="bg-[#FAF9F5] border border-[#E2ECE4] rounded-3xl p-5 shadow-2xs space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-bold text-[#829489] uppercase tracking-wider">
+          Your arcade progress
+        </p>
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#1B3E2F] bg-white border border-[#E2ECE4] px-2 py-0.5 rounded-full">
+          <Flame className="w-3 h-3 text-amber-500" />
+          {userStreak} day streak
+        </span>
+      </div>
+
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-bold text-[#829489] uppercase tracking-wider">Total points</p>
+          <AnimatedNumber
+            value={userPoints}
+            className="font-serif text-4xl font-bold text-[#1B3E2F] leading-none"
+          />
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] font-bold text-[#829489] uppercase tracking-wider">Best score</p>
+          <AnimatedNumber
+            value={overallBest}
+            className="font-serif text-2xl font-bold text-emerald-700 leading-none"
+          />
         </div>
       </div>
 
-      {/* 3 Game Mode Switcher Tabs */}
-      <div className="flex items-center space-x-2 bg-white border border-[#E2ECE4] p-1.5 rounded-2xl shadow-2xs overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('quiz')}
-          className={`flex-1 min-w-[140px] py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center space-x-2 transition-all ${
-            activeTab === 'quiz'
-              ? 'bg-[#1B3E2F] text-white shadow-xs'
-              : 'text-[#5A6D62] hover:bg-[#EFF5EE] hover:text-[#1B3E2F]'
-          }`}
-        >
-          <Apple className="w-4 h-4" />
-          <span>1. Health Quiz</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('memory')}
-          className={`flex-1 min-w-[140px] py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center space-x-2 transition-all ${
-            activeTab === 'memory'
-              ? 'bg-[#1B3E2F] text-white shadow-xs'
-              : 'text-[#5A6D62] hover:bg-[#EFF5EE] hover:text-[#1B3E2F]'
-          }`}
-        >
-          <Brain className="w-4 h-4" />
-          <span>2. Memory Match</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('habits')}
-          className={`flex-1 min-w-[140px] py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center space-x-2 transition-all ${
-            activeTab === 'habits'
-              ? 'bg-[#1B3E2F] text-white shadow-xs'
-              : 'text-[#5A6D62] hover:bg-[#EFF5EE] hover:text-[#1B3E2F]'
-          }`}
-        >
-          <CalendarCheck className="w-4 h-4" />
-          <span>3. Habit Challenge ({completedHabitsCount}/6)</span>
-        </button>
+      <div className="space-y-2 pt-1">
+        {ARCADE_GAMES.map(game => {
+          const best = userScores[game.bestKey] || 0
+          const Icon = game.icon
+          return (
+            <div key={game.id} className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-6 h-6 rounded-lg bg-white border border-[#E2ECE4] flex items-center justify-center text-[#1B3E2F] shrink-0">
+                  <Icon className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-[11px] font-semibold text-[#1E2D25] truncate">
+                  {game.title}
+                </span>
+              </div>
+              <span className="text-[11px] font-bold text-[#5A6D62] shrink-0">
+                {best} pts
+              </span>
+            </div>
+          )
+        })}
       </div>
+    </div>
+  )
 
-      {/* Main Grid: Left Game Area (8 cols) & Right Companion Stats (4 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-7">
-        
-        {/* ========================================================= */}
-        {/* LEFT COLUMN: ACTIVE GAME (8 cols)                         */}
-        {/* ========================================================= */}
-        <div className="lg:col-span-8 space-y-6">
+  return (
+    <div className="space-y-6 max-w-7xl mx-auto pb-12 font-sans relative">
+      <PointsCelebration event={celebration} />
 
-          {/* --------------------------------------------------------- */}
-          {/* TAB 1: HEALTH QUIZ                                        */}
-          {/* --------------------------------------------------------- */}
-          {activeTab === 'quiz' && (
-            <div className="space-y-6">
-              {/* Quiz Banner Header */}
-              <div className="bg-[#EFF5EE] border border-[#E2ECE4] rounded-3xl p-6 shadow-2xs flex items-center justify-between">
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-[10px] font-bold text-emerald-800 bg-white px-2.5 py-0.5 rounded-full border border-[#E2ECE4]">
-                      In progress
+      {/* ========================================================= */}
+      {/* HUB HERO                                                  */}
+      {/* ========================================================= */}
+      {activeView === 'hub' ? (
+        <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-[#173B2C] via-[#24523E] to-[#32724F] p-6 sm:p-8 text-white shadow-[0_25px_60px_-30px_rgba(19,50,37,0.8)]">
+          <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full bg-emerald-300/10 blur-2xl" />
+          <div className="absolute -bottom-24 left-1/3 h-56 w-56 rounded-full bg-amber-200/10 blur-2xl" />
+          <div className="pointer-events-none absolute right-6 top-1/2 hidden -translate-y-1/2 opacity-20 lg:block">
+            <Gamepad2 className="w-48 h-48" strokeWidth={1} />
+          </div>
+
+          <div className="relative flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+            <div className="max-w-2xl">
+              <p className="text-[10px] font-bold text-emerald-200/90 uppercase tracking-[0.28em]">
+                PATIENT ENGAGEMENT / HEALTH GAMES ARCADE
+              </p>
+              <h1 className="mt-2 font-serif text-3xl sm:text-4xl lg:text-[2.7rem] font-bold leading-tight tracking-tight">
+                Play smart. Feel better.
+              </h1>
+              <p className="mt-2 text-xs sm:text-sm text-emerald-50/80 leading-relaxed max-w-xl">
+                Five original challenges, one flowing point total. Every correct answer, matched
+                pair and daily habit earns real points that are saved to your learning profile.
+              </p>
+
+              <div className="mt-5 flex flex-wrap items-center gap-2.5">
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/10 border border-white/15 px-3.5 py-1.5 backdrop-blur-xs">
+                  <Trophy className="w-4 h-4 text-amber-300" />
+                  <AnimatedNumber value={userPoints} className="text-sm font-bold" />
+                  <span className="text-[11px] text-emerald-100/80 font-semibold">points</span>
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/10 border border-white/15 px-3.5 py-1.5 backdrop-blur-xs">
+                  <Flame className="w-4 h-4 text-amber-300" />
+                  <span className="text-sm font-bold">{userStreak}</span>
+                  <span className="text-[11px] text-emerald-100/80 font-semibold">day streak</span>
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/10 border border-white/15 px-3.5 py-1.5 backdrop-blur-xs">
+                  <Award className="w-4 h-4 text-amber-300" />
+                  <span className="text-sm font-bold">{unlockedAchievements}/{achievements.length}</span>
+                  <span className="text-[11px] text-emerald-100/80 font-semibold">badges</span>
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => {
+                  toggleSound()
+                  if (!soundEnabled) playGameSound('click', true, soundVolume)
+                }}
+                className="w-10 h-10 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-colors"
+                title={soundEnabled ? 'Mute game sounds' : 'Unmute game sounds'}
+                aria-label={soundEnabled ? 'Mute game sounds' : 'Unmute game sounds'}
+              >
+                {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+              </button>
+              <div className="hidden sm:flex items-center gap-2 rounded-xl bg-white/10 border border-white/20 px-3 h-10">
+                <VolumeX className="w-3.5 h-3.5 text-emerald-100/70" />
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={Math.round(soundVolume * 100)}
+                  onChange={e => setSoundVolume(Number(e.target.value) / 100)}
+                  className="w-24 accent-amber-300 cursor-pointer"
+                  aria-label="Game sound volume"
+                />
+                <Volume2 className="w-3.5 h-3.5 text-emerald-100/70" />
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* ========================================================= */
+        /* PLAY HEADER                                                */
+        /* ========================================================= */
+        <div className="space-y-4">
+          <button
+            onClick={backToArcade}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-[#5A6D62] hover:text-[#1B3E2F] transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            All games
+          </button>
+
+          <div className="relative overflow-hidden rounded-3xl border border-[#E2ECE4] bg-white p-4 sm:p-5 shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="w-24 h-16 rounded-2xl overflow-hidden border border-[#E2ECE4] shrink-0">
+                  <GameArtwork gameId={activeArcade.art} className="w-full h-full" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-800 bg-[#EFF5EE] border border-[#E2ECE4] px-2 py-0.5 rounded-full">
+                      {activeArcade.category}
                     </span>
-                    <span className="text-xs text-[#5A6D62]">
-                      {activeGame.category} • {activeGame.questions.length} questions
+                    <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${difficultyStyle(activeArcade.difficulty)}`}>
+                      {activeArcade.difficulty}
                     </span>
                   </div>
-                  <h3 className="text-xl sm:text-2xl font-serif font-bold text-[#1B3E2F] mt-1.5">
-                    {activeGame.title}
+                  <h1 className="font-serif text-xl sm:text-2xl font-bold text-[#1B3E2F] mt-1 truncate">
+                    {activeArcade.title}
+                  </h1>
+                  <p className="text-[11px] text-[#5A6D62] mt-0.5 truncate">
+                    {activeArcade.description}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="px-3.5 py-2 rounded-xl bg-[#EFF5EE] border border-[#E2ECE4] text-center">
+                  <p className="text-[9px] font-bold text-[#829489] uppercase tracking-wider">This round</p>
+                  <AnimatedNumber
+                    value={currentRoundPoints}
+                    className="font-serif text-xl font-bold text-[#1B3E2F] leading-none"
+                  />
+                </div>
+                <div className="px-3.5 py-2 rounded-xl bg-white border border-[#E2ECE4] text-center">
+                  <p className="text-[9px] font-bold text-[#829489] uppercase tracking-wider">Best</p>
+                  <AnimatedNumber
+                    value={activeBest}
+                    className="font-serif text-xl font-bold text-emerald-700 leading-none"
+                  />
+                </div>
+                <button
+                  onClick={() => {
+                    toggleSound()
+                    if (!soundEnabled) playGameSound('click', true, soundVolume)
+                  }}
+                  className="w-9 h-9 rounded-xl bg-[#EFF5EE] border border-[#E2ECE4] flex items-center justify-center text-[#1B3E2F] hover:bg-[#E4EFE4] transition-colors"
+                  aria-label={soundEnabled ? 'Mute game sounds' : 'Unmute game sounds'}
+                >
+                  {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* HUB OR ACTIVE GAME                                        */}
+      {/* ========================================================= */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-7">
+        <div className="lg:col-span-8 space-y-6">
+          {activeView === 'hub' && (
+            <>
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <h2 className="font-serif text-2xl font-bold text-[#1B3E2F]">Choose your challenge</h2>
+                  <p className="text-xs text-[#5A6D62] mt-0.5">
+                    Tap any card to launch the playable game. Points are awarded only for real actions.
+                  </p>
+                </div>
+                <span className="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-800 bg-[#EFF5EE] border border-[#E2ECE4] px-2.5 py-1 rounded-full">
+                  <Zap className="w-3 h-3" />
+                  {Object.values(gamePlayCounts).reduce((a, b) => a + b, 0)} sessions played
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {ARCADE_GAMES.map(game => {
+                  const best = userScores[game.bestKey] || 0
+                  const Icon = game.icon
+                  return (
+                    <button
+                      key={game.id}
+                      type="button"
+                      onClick={() => openGame(game)}
+                      className="game-card group relative w-full overflow-hidden rounded-3xl border border-[#E2ECE4] bg-white text-left shadow-2xs"
+                    >
+                      <div className="relative h-44 sm:h-48 overflow-hidden">
+                        <div className="game-art absolute inset-0">
+                          <GameArtwork gameId={game.art} className="w-full h-full" />
+                        </div>
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#0F2F24]/70 via-[#0F2F24]/5 to-transparent" />
+                        <div className="game-shine" />
+
+                        <div className="absolute left-3 top-3 flex items-center gap-1.5">
+                          <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded-full border shadow-2xs ${difficultyStyle(game.difficulty)}`}>
+                            {game.difficulty}
+                          </span>
+                          <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded-full bg-white/90 text-[#1B3E2F] border border-white/60 shadow-2xs">
+                            {game.category}
+                          </span>
+                        </div>
+
+                        <span className="absolute right-3 top-3 text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded-full bg-[#1B3E2F]/85 text-emerald-100 border border-white/20 backdrop-blur-xs">
+                          {game.pointsLabel}
+                        </span>
+
+                        <span className="game-play-overlay absolute inset-0 m-auto h-fit w-fit inline-flex items-center gap-2 rounded-full bg-white/95 px-5 py-2.5 text-xs font-bold text-[#1B3E2F] shadow-2xl">
+                          <Play className="w-4 h-4 fill-[#1B3E2F]" />
+                          PLAY NOW
+                        </span>
+
+                        <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between text-white">
+                          <span className="inline-flex items-center gap-1.5 text-[10px] font-bold">
+                            <Clock className="w-3.5 h-3.5" />
+                            {game.duration}
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 text-[10px] font-bold">
+                            <Star className="w-3.5 h-3.5 text-amber-300" />
+                            Best {best} pts
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-5 space-y-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-[#EFF5EE] border border-[#E2ECE4] text-[#1B3E2F] flex items-center justify-center shrink-0">
+                              <Icon className="w-4 h-4" />
+                            </div>
+                            <h3 className="font-serif text-lg sm:text-xl font-bold text-[#1B3E2F] leading-tight">
+                              {game.title}
+                            </h3>
+                          </div>
+                          <span className="shrink-0 inline-flex items-center gap-1 text-[9px] font-bold text-[#5A6D62] bg-[#FAF9F5] border border-[#E2ECE4] px-2 py-1 rounded-full">
+                            <Trophy className="w-3 h-3 text-amber-600" />
+                            {best} best
+                          </span>
+                        </div>
+                        <p className="text-xs text-[#5A6D62] leading-relaxed">
+                          {game.description}
+                        </p>
+                        <div className="flex items-center justify-between pt-2 border-t border-[#E2ECE4]/70">
+                          <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-800">
+                            <Sparkles className="w-3.5 h-3.5" />
+                            Live points &amp; achievements
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#1B3E2F] group-hover:gap-2 transition-all">
+                            Enter game
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          )}
+
+          {/* --------------------------------------------------------- */}
+          {/* QUIZ GAME                                                 */}
+          {/* --------------------------------------------------------- */}
+          {activeView === 'play' && activeTab === 'quiz' && (
+            <div className="space-y-6">
+              <div className="bg-[#EFF5EE] border border-[#E2ECE4] rounded-3xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-emerald-800 bg-white px-2.5 py-0.5 rounded-full border border-[#E2ECE4]">
+                      {showQuizComplete ? 'Completed' : 'In progress'}
+                    </span>
+                    <span className="text-xs text-[#5A6D62]">
+                      {activeQuiz.category} • {activeQuiz.questions.length} questions
+                    </span>
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-serif font-bold text-[#1B3E2F] mt-1">
+                    {activeQuiz.title}
                   </h3>
                 </div>
 
-                <div className="flex items-center space-x-3">
-                  <div className="flex items-center space-x-1.5 text-xs font-semibold text-[#5A6D62] bg-white px-3 py-1.5 rounded-xl border border-[#E2ECE4]">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-[#5A6D62] bg-white px-3 py-1.5 rounded-xl border border-[#E2ECE4]">
                     <Clock className="w-4 h-4 text-[#829489]" />
                     <span>{quizTimer}s</span>
                   </div>
                   <button
-                    onClick={() => {
-                      const nextId = selectedGameId === 'balanced-eating' ? 'medicine-match' : 'balanced-eating'
-                      setSelectedGameId(nextId)
-                      handleRestartQuiz()
-                    }}
+                    onClick={switchQuizTopic}
                     className="text-xs font-semibold text-[#1B3E2F] hover:underline bg-white px-3 py-1.5 rounded-xl border border-[#E2ECE4]"
                   >
-                    Switch Topic
+                    Switch topic
                   </button>
                 </div>
               </div>
 
               {!showQuizComplete ? (
-                /* Question Card matching Reference Screenshot */
                 <div className="bg-white border border-[#E2ECE4] rounded-3xl p-6 sm:p-8 shadow-2xs space-y-6">
-                  {/* Progress Header */}
                   <div className="flex items-center justify-between text-xs text-[#829489] font-bold uppercase tracking-wider">
-                    <span>Question {currentQuestionIndex + 1} of {activeGame.questions.length}</span>
+                    <span>Question {currentQuestionIndex + 1} of {activeQuiz.questions.length}</span>
                     <span className="text-emerald-700">{currentQuestion.category}</span>
                   </div>
 
-                  {/* Visual Progress Bar */}
                   <div className="w-full bg-[#EFF5EE] h-2 rounded-full overflow-hidden flex gap-1">
-                    {activeGame.questions.map((_, i) => (
+                    {activeQuiz.questions.map((_, i) => (
                       <div
                         key={i}
                         className={`h-full flex-1 rounded-full transition-all duration-300 ${
@@ -590,20 +1301,18 @@ export default function HealthGames() {
                     ))}
                   </div>
 
-                  {/* Question Title */}
                   <h2 className="font-serif font-bold text-xl sm:text-2xl text-[#1E2D25] leading-snug">
                     {currentQuestion.question}
                   </h2>
                   <p className="text-xs text-[#5A6D62]">
-                    Choose one answer. You can learn from the medical explanation below.
+                    Choose one answer. Correct answers earn {currentQuestion.points} points and unlock a medical explanation.
                   </p>
 
-                  {/* Options List */}
                   <div className="space-y-3">
                     {currentQuestion.options.map(option => {
                       const isSelected = selectedOptionKey === option.key
                       const isCorrect = option.key === currentQuestion.correctKey
-                      
+
                       let optionClasses = 'bg-[#FAF9F5] border-[#E2ECE4] text-[#1E2D25] hover:border-[#1B3E2F]/40 hover:bg-[#EFF5EE]'
                       if (isAnswerChecked) {
                         if (isCorrect) {
@@ -646,17 +1355,18 @@ export default function HealthGames() {
                     })}
                   </div>
 
-                  {/* Explanation Card when Answer is Checked */}
                   {isAnswerChecked && (
                     <div className="p-5 rounded-2xl bg-[#EFF5EE] border border-[#E2ECE4] space-y-2 animate-in fade-in duration-200">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center space-x-2 text-xs font-bold text-[#1B3E2F]">
-                          <Sparkles className="w-4 h-4 text-emerald-700" />
+                          <Sparkles className="w-4 h-4 text-emerald-700 shrink-0" />
                           <span>{currentQuestion.explanationTitle}</span>
                         </div>
                         {selectedOptionKey === currentQuestion.correctKey && (
-                          <span className="text-[11px] font-bold text-emerald-800 bg-white px-2 py-0.5 rounded-full border border-emerald-200">
-                            +{currentQuestion.points} points
+                          <span className="text-[11px] font-bold text-emerald-800 bg-white px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">
+                            {questionAward > 0
+                              ? `+${questionAward} points`
+                              : 'Already earned today'}
                           </span>
                         )}
                       </div>
@@ -666,10 +1376,9 @@ export default function HealthGames() {
                     </div>
                   )}
 
-                  {/* Action Buttons */}
                   <div className="flex items-center justify-between pt-2">
                     <button
-                      onClick={handleRestartQuiz}
+                      onClick={() => resetQuiz(activeQuiz.id)}
                       className="text-xs font-semibold text-[#5A6D62] hover:text-[#1B3E2F] flex items-center space-x-1"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
@@ -681,50 +1390,76 @@ export default function HealthGames() {
                         onClick={handleNextQuestion}
                         className="py-2.5 px-6 bg-[#1B3E2F] hover:bg-[#143024] text-white rounded-xl text-xs font-semibold transition-all shadow-xs flex items-center space-x-2"
                       >
-                        <span>{currentQuestionIndex + 1 === activeGame.questions.length ? 'Finish & see score' : 'Next question'}</span>
+                        <span>{currentQuestionIndex + 1 === activeQuiz.questions.length ? 'Finish & see score' : 'Next question'}</span>
                         <ArrowRight className="w-4 h-4" />
                       </button>
                     )}
                   </div>
                 </div>
               ) : (
-                /* Final Score Summary View */
                 <div className="bg-white border border-[#E2ECE4] rounded-3xl p-8 text-center shadow-2xs space-y-6">
                   <div className="w-16 h-16 rounded-3xl bg-[#EFF5EE] text-[#1B3E2F] flex items-center justify-center mx-auto shadow-xs">
                     <Trophy className="w-8 h-8 text-amber-600" />
                   </div>
                   <div>
                     <h2 className="text-2xl font-serif font-bold text-[#1B3E2F]">
-                      Outstanding Quiz Completed!
+                      {quizCorrectCount === activeQuiz.questions.length
+                        ? 'Perfect round — outstanding!'
+                        : 'Quiz completed!'}
                     </h2>
                     <p className="text-xs text-[#5A6D62] mt-1">
-                      You completed the {activeGame.title} and earned valuable health knowledge.
+                      {roundTotal > 0
+                        ? `You completed ${activeQuiz.title} and added real points to your learning profile.`
+                        : `You already earned today's points for ${activeQuiz.title}. Your best score is still tracked.`}
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 max-w-sm mx-auto gap-4">
+                  <div className="grid grid-cols-3 max-w-md mx-auto gap-3">
                     <div className="p-4 rounded-2xl bg-[#FAF9F5] border border-[#E2ECE4]">
-                      <p className="text-xs text-[#5A6D62]">Score Earned</p>
-                      <p className="text-3xl font-serif font-bold text-[#1B3E2F] mt-0.5">+{quizScore}</p>
+                      <p className="text-[10px] font-bold text-[#5A6D62] uppercase tracking-wider">Points earned</p>
+                      <AnimatedNumber
+                        value={roundTotal}
+                        className="font-serif font-bold text-[#1B3E2F] mt-0.5 text-2xl block"
+                      />
                     </div>
                     <div className="p-4 rounded-2xl bg-[#FAF9F5] border border-[#E2ECE4]">
-                      <p className="text-xs text-[#5A6D62]">Accuracy</p>
-                      <p className="text-3xl font-serif font-bold text-emerald-700 mt-0.5">100%</p>
+                      <p className="text-[10px] font-bold text-[#5A6D62] uppercase tracking-wider">Accuracy</p>
+                      <p className="font-serif font-bold text-emerald-700 mt-0.5 text-2xl">
+                        {Math.round((quizCorrectCount / activeQuiz.questions.length) * 100)}%
+                      </p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-[#FAF9F5] border border-[#E2ECE4]">
+                      <p className="text-[10px] font-bold text-[#5A6D62] uppercase tracking-wider">Best score</p>
+                      <p className="font-serif font-bold text-[#1B3E2F] mt-0.5 text-2xl">
+                        {userScores[activeQuiz.id] || 0}
+                      </p>
                     </div>
                   </div>
 
+                  {roundBonus > 0 && (
+                    <p className="text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/70 rounded-full px-3 py-1 inline-block">
+                      Includes +{roundBonus} completion bonus
+                    </p>
+                  )}
+
                   <div className="flex items-center justify-center gap-3">
                     <button
-                      onClick={handleRestartQuiz}
+                      onClick={() => resetQuiz(activeQuiz.id)}
                       className="py-2.5 px-6 rounded-xl border border-[#E2ECE4] text-xs font-semibold text-[#1B3E2F] hover:bg-[#EFF5EE]"
                     >
-                      Play Again
+                      Play again
+                    </button>
+                    <button
+                      onClick={backToArcade}
+                      className="py-2.5 px-6 rounded-xl bg-[#1B3E2F] text-white text-xs font-semibold hover:bg-[#143024] shadow-xs"
+                    >
+                      Choose another game
                     </button>
                     <button
                       onClick={() => navigate('/patient/learning-progress')}
-                      className="py-2.5 px-6 rounded-xl bg-[#1B3E2F] text-white text-xs font-semibold hover:bg-[#143024] shadow-xs"
+                      className="py-2.5 px-4 rounded-xl text-xs font-semibold text-[#5A6D62] hover:text-[#1B3E2F]"
                     >
-                      View in Learning Progress
+                      Learning progress
                     </button>
                   </div>
                 </div>
@@ -733,19 +1468,18 @@ export default function HealthGames() {
           )}
 
           {/* --------------------------------------------------------- */}
-          {/* TAB 2: HEALTH MEMORY MATCH                                */}
+          {/* MEMORY GAME                                               */}
           {/* --------------------------------------------------------- */}
-          {activeTab === 'memory' && (
+          {activeView === 'play' && activeTab === 'memory' && (
             <div className="space-y-6">
-              {/* Memory Match Header Banner */}
-              <div className="bg-[#EFF5EE] border border-[#E2ECE4] rounded-3xl p-6 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="bg-[#EFF5EE] border border-[#E2ECE4] rounded-3xl p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <div className="flex items-center space-x-2">
                     <span className="text-[10px] font-bold text-emerald-800 bg-white px-2.5 py-0.5 rounded-full border border-[#E2ECE4]">
-                      Card Match Challenge
+                      Card match challenge
                     </span>
                     <span className="text-xs text-[#5A6D62]">
-                      Match health habits with physiological benefits
+                      Match habits with their physiological benefit
                     </span>
                   </div>
                   <h3 className="text-xl sm:text-2xl font-serif font-bold text-[#1B3E2F] mt-1.5">
@@ -753,9 +1487,12 @@ export default function HealthGames() {
                   </h3>
                 </div>
 
-                <div className="flex items-center space-x-3 text-xs">
+                <div className="flex items-center space-x-2 text-xs">
                   <div className="bg-white px-3.5 py-2 rounded-xl border border-[#E2ECE4] text-[#1E2D25] font-semibold">
-                    <span>Attempts: <strong>{attempts}</strong></span>
+                    Score: <strong className="text-emerald-700">{memoryScore}</strong>
+                  </div>
+                  <div className="bg-white px-3.5 py-2 rounded-xl border border-[#E2ECE4] text-[#1E2D25] font-semibold">
+                    Attempts: <strong>{attempts}</strong>
                   </div>
                   <div className="bg-white px-3.5 py-2 rounded-xl border border-[#E2ECE4] text-[#1E2D25] font-semibold flex items-center space-x-1.5">
                     <Clock className="w-4 h-4 text-[#829489]" />
@@ -763,15 +1500,14 @@ export default function HealthGames() {
                   </div>
                   <button
                     onClick={initMemoryGame}
-                    className="p-2 bg-white rounded-xl border border-[#E2ECE4] text-[#1B3E2F] hover:bg-gray-50"
-                    title="Restart Memory Game"
+                    className="p-2 bg-white rounded-xl border border-[#E2ECE4] text-[#1B3E2F] hover:bg-[#FAF9F5]"
+                    title="Restart memory game"
                   >
                     <RotateCcw className="w-4 h-4" />
                   </button>
                 </div>
               </div>
 
-              {/* Memory Cards Grid (12 Cards: 3x4 on desktop, 2x6 on mobile) */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                 {memoryCards.map((card, idx) => {
                   const isFlipped = flippedIndices.includes(idx) || matchedPairs.includes(card.pairId)
@@ -785,8 +1521,8 @@ export default function HealthGames() {
                         isMatched
                           ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-400/40 opacity-90'
                           : isFlipped
-                          ? 'bg-white border-[#1B3E2F] shadow-md scale-102'
-                          : 'bg-gradient-to-br from-[#1B3E2F] to-[#2B5E48] border-[#1B3E2F] hover:shadow-md hover:scale-101'
+                          ? 'bg-white border-[#1B3E2F] shadow-md scale-[1.02]'
+                          : 'bg-gradient-to-br from-[#1B3E2F] to-[#2B5E48] border-[#1B3E2F] hover:shadow-md hover:scale-[1.01]'
                       }`}
                     >
                       {isFlipped ? (
@@ -804,7 +1540,7 @@ export default function HealthGames() {
                           </div>
                           {isMatched && (
                             <span className="text-[9px] font-bold text-emerald-700 uppercase tracking-wider block">
-                              Matched ✓
+                              Matched +20
                             </span>
                           )}
                         </div>
@@ -812,7 +1548,7 @@ export default function HealthGames() {
                         <div className="text-center text-white/80 space-y-1">
                           <Activity className="w-6 h-6 mx-auto opacity-70" />
                           <p className="text-[10px] font-semibold tracking-wider uppercase text-emerald-200">
-                            Flip Card
+                            Flip card
                           </p>
                         </div>
                       )}
@@ -821,61 +1557,69 @@ export default function HealthGames() {
                 })}
               </div>
 
-              {/* Memory Match Success Modal */}
               {memoryComplete && (
                 <div className="bg-emerald-50 border border-emerald-300 rounded-3xl p-6 text-center space-y-3 shadow-xs">
                   <div className="w-12 h-12 rounded-full bg-emerald-600 text-white flex items-center justify-center mx-auto">
                     <Check className="w-6 h-6" />
                   </div>
                   <h4 className="font-serif font-bold text-lg text-emerald-950">
-                    All Pairs Matched Successfully!
+                    All pairs matched successfully!
                   </h4>
                   <p className="text-xs text-emerald-800 max-w-md mx-auto">
-                    Completed in <strong>{attempts} attempts</strong> and <strong>{memoryTimer} seconds</strong>. +100 bonus learning points added to your profile!
+                    Completed in <strong>{attempts} attempts</strong> and <strong>{memoryTimer} seconds</strong>.{' '}
+                    {memoryScore > 0
+                      ? <>You earned <strong>{memoryScore} points</strong> from genuine matches and the completion bonus.</>
+                      : <>Today&apos;s match points were already earned — replay practice does not duplicate them.</>}
                   </p>
-                  <button
-                    onClick={initMemoryGame}
-                    className="py-2 px-5 bg-[#1B3E2F] hover:bg-[#143024] text-white rounded-xl text-xs font-bold"
-                  >
-                    Play Again
-                  </button>
+                  <div className="flex items-center justify-center gap-2">
+                    <button
+                      onClick={initMemoryGame}
+                      className="py-2 px-5 bg-[#1B3E2F] hover:bg-[#143024] text-white rounded-xl text-xs font-bold"
+                    >
+                      Play again
+                    </button>
+                    <button
+                      onClick={backToArcade}
+                      className="py-2 px-5 bg-white border border-[#E2ECE4] text-[#1B3E2F] rounded-xl text-xs font-bold hover:bg-[#EFF5EE]"
+                    >
+                      All games
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
           )}
 
           {/* --------------------------------------------------------- */}
-          {/* TAB 3: DAILY HEALTH HABIT CHALLENGE                       */}
+          {/* HABIT CHALLENGE                                           */}
           {/* --------------------------------------------------------- */}
-          {activeTab === 'habits' && (
+          {activeView === 'play' && activeTab === 'habits' && (
             <div className="space-y-6">
-              {/* Habits Hero Header */}
               <div className="bg-[#EFF5EE] border border-[#E2ECE4] rounded-3xl p-6 shadow-2xs">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <span className="text-[10px] font-bold text-emerald-800 bg-white px-2.5 py-0.5 rounded-full border border-[#E2ECE4]">
-                      Daily Clinical Wellbeing
+                      Daily clinical wellbeing
                     </span>
                     <h3 className="text-xl sm:text-2xl font-serif font-bold text-[#1B3E2F] mt-1.5">
-                      Today's Health Habit Challenge
+                      Today&apos;s Health Habit Challenge
                     </h3>
                     <p className="text-xs text-[#5A6D62] mt-0.5">
-                      Complete daily physician-recommended habits. Earn +10 points for each checked milestone!
+                      Complete daily physician-recommended habits. Earn +10 points for each checked milestone plus a +25 bonus for all six.
                     </p>
                   </div>
 
                   <div className="bg-white p-3.5 rounded-2xl border border-[#E2ECE4] text-center min-w-[140px] shadow-2xs">
-                    <span className="text-xs font-bold text-[#5A6D62] uppercase tracking-wider block">Today's Progress</span>
+                    <span className="text-xs font-bold text-[#5A6D62] uppercase tracking-wider block">Today&apos;s progress</span>
                     <span className="text-2xl font-serif font-bold text-[#1B3E2F]">
                       {completedHabitsCount} / {habitList.length}
                     </span>
                     <span className="text-[10px] text-emerald-700 font-bold block mt-0.5">
-                      {habitPercent}% Goal Reached
+                      {habitPercent}% goal reached
                     </span>
                   </div>
                 </div>
 
-                {/* Progress Bar */}
                 <div className="w-full bg-white h-2.5 rounded-full overflow-hidden mt-5 border border-[#E2ECE4]">
                   <div
                     className="h-full bg-emerald-700 rounded-full transition-all duration-500"
@@ -884,9 +1628,8 @@ export default function HealthGames() {
                 </div>
               </div>
 
-              {/* Habit Checklist Cards */}
               <div className="space-y-3">
-                {habitList.map((habit) => (
+                {habitList.map(habit => (
                   <div
                     key={habit.id}
                     onClick={() => handleToggleHabitItem(habit.id)}
@@ -905,7 +1648,7 @@ export default function HealthGames() {
                         <Check className="w-4 h-4" />
                       </div>
                       <div>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-2 flex-wrap">
                           <p className={`text-sm font-bold leading-tight ${
                             habit.completed ? 'line-through text-stone-500' : 'text-[#1E2D25]'
                           }`}>
@@ -932,118 +1675,89 @@ export default function HealthGames() {
                 ))}
               </div>
 
-              {/* Celebration Banner when 100% completed */}
               {habitPercent === 100 && (
                 <div className="p-6 rounded-3xl bg-gradient-to-r from-emerald-800 to-[#1B3E2F] text-white shadow-md text-center space-y-2">
                   <Sparkles className="w-8 h-8 text-amber-300 mx-auto" />
                   <h4 className="font-serif font-bold text-xl">
-                    Great job! Daily Health Goal Completed!
+                    Daily health goal completed!
                   </h4>
                   <p className="text-xs text-emerald-100 max-w-md mx-auto">
-                    You completed all 6 daily wellness habits today. Your continuous streak is +1 stronger!
+                    You completed all six daily wellness habits today and earned the full daily bonus. Your streak is now +1 stronger.
                   </p>
+                  <button
+                    onClick={backToArcade}
+                    className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-bold text-[#1B3E2F] bg-white/95 hover:bg-white px-4 py-2 rounded-xl"
+                  >
+                    Back to arcade
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               )}
             </div>
           )}
-
         </div>
 
         {/* ========================================================= */}
-        {/* RIGHT COLUMN: QUIZ COMPANION & STATS (4 cols)             */}
+        {/* RIGHT SIDEBAR                                             */}
         {/* ========================================================= */}
         <div className="lg:col-span-4 space-y-5">
-          
-          {/* Companion Card matching Reference Screenshot */}
-          <div className="bg-[#FAF9F5] border border-[#E2ECE4] rounded-3xl p-6 shadow-2xs space-y-5">
-            <div>
-              <p className="text-[10px] font-bold text-[#829489] uppercase tracking-wider mb-2">
-                YOUR QUIZ COMPANION
+          {activeView === 'play' && (
+            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#1B3E2F] to-[#2F6B4E] p-5 text-white shadow-md">
+              <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-emerald-300/10" />
+              <p className="text-[10px] font-bold text-emerald-200/80 uppercase tracking-wider">
+                This round · {activeArcade.title}
               </p>
-              
-              {/* Botanical/Healthy Bowl Illustration */}
-              <div className="w-full h-36 rounded-2xl overflow-hidden bg-white border border-[#E2ECE4] mb-4">
-                <img
-                  src="https://images.unsplash.com/photo-1540420773420-3366772f4999?w=600&auto=format&fit=crop&q=80"
-                  alt="Balanced Bowl"
-                  className="w-full h-full object-cover"
+              <div className="mt-2 flex items-end justify-between">
+                <AnimatedNumber
+                  value={currentRoundPoints}
+                  className="font-serif text-4xl font-bold leading-none"
                 />
+                <span className="text-[11px] font-bold text-emerald-100/80">points</span>
               </div>
-
-              <h4 className="font-serif font-bold text-lg text-[#1B3E2F] leading-snug">
-                Curiosity looks good on you.
-              </h4>
-              <p className="text-xs text-[#5A6D62] mt-1.5 leading-relaxed">
-                Build understanding one question at a time. There's no timer pressure and no penalties for learning.
-              </p>
-            </div>
-
-            {/* Score Metrics */}
-            <div className="pt-4 border-t border-[#E2ECE4] space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-[#5A6D62]">This round score</span>
-                <span className="text-xl font-serif font-bold text-[#1B3E2F]">{quizScore} pts</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-[#5A6D62]">Learning total</span>
-                <span className="text-xl font-serif font-bold text-[#1B3E2F]">{userPoints} pts</span>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-white/10 border border-white/15 px-3 py-2">
+                  <p className="text-[9px] uppercase tracking-wider text-emerald-100/70 font-bold">Best</p>
+                  <p className="text-lg font-serif font-bold">{activeBest}</p>
+                </div>
+                <div className="rounded-xl bg-white/10 border border-white/15 px-3 py-2">
+                  <p className="text-[9px] uppercase tracking-wider text-emerald-100/70 font-bold">Streak</p>
+                  <p className="text-lg font-serif font-bold inline-flex items-center gap-1">
+                    {userStreak}
+                    <Flame className="w-4 h-4 text-amber-300" />
+                  </p>
+                </div>
               </div>
             </div>
+          )}
 
-            {/* Streak Indicator */}
-            <div className="p-3.5 rounded-2xl bg-white border border-[#E2ECE4] flex items-center space-x-3">
-              <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-                <Flame className="w-5 h-5 fill-amber-500" />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-[#1E2D25]">{correctInRow || 3} in a row</p>
-                <p className="text-[10px] text-[#5A6D62]">Keep exploring, not rushing</p>
-              </div>
-            </div>
-          </div>
+          {progressCard}
+          {achievementsCard}
+          {soundControls}
 
-          {/* Your Next Achievement Card matching Reference Screenshot */}
-          <div className="bg-white border border-[#E2ECE4] rounded-3xl p-6 shadow-2xs space-y-4">
-            <p className="text-[10px] font-bold text-[#829489] uppercase tracking-wider">
-              YOUR NEXT ACHIEVEMENT
-            </p>
-            
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-2xl bg-[#EFF5EE] text-[#1B3E2F] flex items-center justify-center shrink-0">
-                <Award className="w-6 h-6 text-forest-green" />
-              </div>
-              <div>
-                <h5 className="font-serif font-bold text-sm text-[#1B3E2F]">Nutrition Explorer</h5>
-                <p className="text-[11px] text-[#5A6D62] mt-0.5">Finish the Balanced Eating challenge to unlock this badge.</p>
-              </div>
-            </div>
-
-            <div className="space-y-1.5 pt-2">
-              <div className="flex items-center justify-between text-[11px] text-[#5A6D62]">
-                <span>Progress</span>
-                <span>{currentQuestionIndex + 1} of {activeGame.questions.length} answered</span>
-              </div>
-              <div className="w-full bg-[#EFF5EE] h-2 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-emerald-700 rounded-full transition-all duration-300"
-                  style={{ width: `${Math.round(((currentQuestionIndex + 1) / activeGame.questions.length) * 100)}%` }}
-                />
-              </div>
-            </div>
-
-            <button
-              onClick={() => navigate('/patient/learning-progress')}
-              className="w-full py-2.5 rounded-xl border border-[#E2ECE4] hover:bg-[#EFF5EE] text-xs font-bold text-[#1B3E2F] transition-colors text-center"
-            >
-              View all achievements
-            </button>
-          </div>
-
-          {/* Disclaimer Footer */}
           <div className="p-4 rounded-2xl bg-[#FAF9F5] border border-[#E2ECE4] text-[11px] text-[#829489] leading-relaxed">
-            Quiz and game points reflect educational learning activity. They do not constitute personalized medical advice.
+            Points and badges reflect educational learning activity. They are not a clinical
+            assessment or personalised medical advice. Scores are saved locally to your profile and
+            are only awarded once per genuine action.
           </div>
 
+          {activeView === 'hub' && (
+            <div className="rounded-2xl border border-[#E2ECE4] bg-white p-4">
+              <p className="text-[10px] font-bold text-[#829489] uppercase tracking-wider">
+                Why it matters
+              </p>
+              <p className="mt-1 text-xs text-[#5A6D62] leading-relaxed">
+                Short, playful learning sessions improve medication safety, nutrition literacy and
+                daily self-care. Keep the streak going, {displayName}.
+              </p>
+              <button
+                onClick={() => navigate('/patient/learning-progress')}
+                className="mt-3 w-full py-2.5 rounded-xl border border-[#E2ECE4] hover:bg-[#EFF5EE] text-xs font-bold text-[#1B3E2F] transition-colors flex items-center justify-center gap-1.5"
+              >
+                View learning progress
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

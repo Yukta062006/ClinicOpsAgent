@@ -143,6 +143,34 @@ export interface HealthHabit {
   points: number;
 }
 
+export interface GameActivity {
+  id: string;
+  gameId: string;
+  score: number;
+  completed: boolean;
+  date: string;
+}
+
+export interface AwardOptions {
+  uniqueKey?: string;
+  gameId?: string;
+  reason?: string;
+}
+
+export interface GameResultOptions {
+  completed?: boolean;
+  bonusPoints?: number;
+  bonusKey?: string;
+  moves?: number;
+  duration?: number;
+}
+
+export interface GameResult {
+  awarded: number;
+  bestScore: number;
+  isNewBest: boolean;
+}
+
 // Data Context Interface
 interface DataContextType {
   // Patients
@@ -193,6 +221,11 @@ interface DataContextType {
   games: Game[];
   userScores: Record<string, number>;
   saveGameScore: (gameId: string, score: number) => void;
+  gameHistory: GameActivity[];
+  gamePlayCounts: Record<string, number>;
+  recordGameResult: (gameId: string, score: number, options?: GameResultOptions) => GameResult;
+  awardPoints: (amount: number, options?: AwardOptions) => number;
+  retractPoints: (amount: number, uniqueKey: string) => number;
   habits: HealthHabit[];
   toggleHabit: (habitId: string) => { completed: boolean; pointsEarned: number };
   
@@ -203,10 +236,13 @@ interface DataContextType {
   userStreak: number;
   startLesson: (lessonId: string) => void;
   completeLesson: (lessonId: string, score: number) => void;
+  unlockAchievement: (achievementId: string) => boolean;
   
   // Settings & Navigation
   soundEnabled: boolean;
   toggleSound: () => void;
+  soundVolume: number;
+  setSoundVolume: (volume: number) => void;
   activeClinic: string;
   setActiveClinic: (clinic: string) => void;
   
@@ -948,10 +984,15 @@ const initialLessons: LearningLesson[] = [
 ];
 
 const initialAchievements: Achievement[] = [
-  { id: '1', title: 'First Step', description: 'Complete your first lesson', unlocked: true, dateUnlocked: 'Earned 08 Oct', points: 100 },
-  { id: '2', title: 'Curious Mind', description: 'Read two research summaries', unlocked: true, dateUnlocked: 'Earned 10 Oct', points: 250 },
-  { id: '3', title: 'Sleep Savvy', description: 'Finish the sleep basics quiz', unlocked: true, dateUnlocked: 'Earned 12 Oct', points: 200 },
-  { id: '4', title: 'Nutrition Explorer', description: 'Finish the balanced eating quiz to unlock this badge', unlocked: false, dateUnlocked: 'In progress', points: 300 }
+  { id: '1', title: 'First Step', description: 'Complete your first lesson', unlocked: true, dateUnlocked: 'Earned 08 Oct', points: 100, icon: 'footprints' },
+  { id: '2', title: 'Curious Mind', description: 'Read two research summaries', unlocked: true, dateUnlocked: 'Earned 10 Oct', points: 250, icon: 'book' },
+  { id: '3', title: 'Sleep Savvy', description: 'Finish the sleep basics quiz', unlocked: true, dateUnlocked: 'Earned 12 Oct', points: 200, icon: 'moon' },
+  { id: '4', title: 'Nutrition Explorer', description: 'Finish the Balanced Eating challenge to unlock this badge', unlocked: false, dateUnlocked: 'In progress', points: 300, icon: 'apple' },
+  { id: '5', title: 'Habit Hero', description: 'Complete all 6 daily health habits in one day', unlocked: false, dateUnlocked: 'In progress', points: 250, icon: 'calendar' },
+  { id: '6', title: 'Memory Master', description: 'Clear every pair in Medical Memory Match', unlocked: false, dateUnlocked: 'In progress', points: 300, icon: 'brain' },
+  { id: '7', title: 'Perfect Round', description: 'Answer every quiz question correctly in one session', unlocked: false, dateUnlocked: 'In progress', points: 400, icon: 'star' },
+  { id: '8', title: 'Arcade Regular', description: 'Play three different health games', unlocked: false, dateUnlocked: 'In progress', points: 200, icon: 'gamepad' },
+  { id: '9', title: 'Point Collector', description: 'Reach 1,000 total learning points', unlocked: false, dateUnlocked: 'In progress', points: 500, icon: 'trophy' }
 ];
 
 export function DataProvider({ children }: { children: ReactNode }) {
@@ -996,6 +1037,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return saved ? JSON.parse(saved) : { 'balanced-eating': 240, 'sleep-basics': 180, 'movement-check': 160 };
   });
 
+  const [gameHistory, setGameHistory] = useState<GameActivity[]>(() => {
+    const saved = localStorage.getItem('clinicops_game_history_v2');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [gamePlayCounts, setGamePlayCounts] = useState<Record<string, number>>(() => {
+    const saved = localStorage.getItem('clinicops_game_play_counts_v2');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  // Keys of points that have already been paid out. Prevents refresh / double-click duplication.
+  const [pointsLedger, setPointsLedger] = useState<string[]>(() => {
+    const saved = localStorage.getItem('clinicops_points_ledger_v2');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [lessons, setLessons] = useState<LearningLesson[]>(() => {
     const saved = localStorage.getItem('clinicops_user_lessons_v2');
     return saved ? JSON.parse(saved) : initialLessons;
@@ -1003,7 +1060,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const [achievements, setAchievements] = useState<Achievement[]>(() => {
     const saved = localStorage.getItem('clinicops_user_achievements_v2');
-    return saved ? JSON.parse(saved) : initialAchievements;
+    if (!saved) return initialAchievements;
+    try {
+      const parsed: Achievement[] = JSON.parse(saved);
+      // Keep prior unlock state, but add any newly shipped achievements.
+      return initialAchievements.map(base => {
+        const existing = parsed.find(item => item.id === base.id);
+        return existing ? { ...base, ...existing, icon: existing.icon || base.icon } : base;
+      });
+    } catch {
+      return initialAchievements;
+    }
   });
 
   const [userPoints, setUserPoints] = useState<number>(() => {
@@ -1024,6 +1091,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
     const saved = localStorage.getItem('clinicops_sound_enabled_v2');
     return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  const [soundVolume, setSoundVolumeState] = useState<number>(() => {
+    const saved = localStorage.getItem('clinicops_sound_volume_v2');
+    const parsed = saved !== null ? Number(saved) : 0.7;
+    return Number.isFinite(parsed) ? Math.min(1, Math.max(0, parsed)) : 0.7;
   });
 
   const [activeClinic, setActiveClinic] = useState<string>(() => {
@@ -1069,6 +1142,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => { localStorage.setItem('clinicops_saved_videos_v2', JSON.stringify(savedVideos)); }, [savedVideos]);
   useEffect(() => { localStorage.setItem('clinicops_subscribed_channels_v2', JSON.stringify(subscribedChannels)); }, [subscribedChannels]);
   useEffect(() => { localStorage.setItem('clinicops_user_scores_v2', JSON.stringify(userScores)); }, [userScores]);
+  useEffect(() => { localStorage.setItem('clinicops_game_history_v2', JSON.stringify(gameHistory)); }, [gameHistory]);
+  useEffect(() => { localStorage.setItem('clinicops_game_play_counts_v2', JSON.stringify(gamePlayCounts)); }, [gamePlayCounts]);
+  useEffect(() => { localStorage.setItem('clinicops_points_ledger_v2', JSON.stringify(pointsLedger.slice(-1000))); }, [pointsLedger]);
+  useEffect(() => { localStorage.setItem('clinicops_sound_volume_v2', soundVolume.toString()); }, [soundVolume]);
   useEffect(() => { localStorage.setItem('clinicops_user_lessons_v2', JSON.stringify(lessons)); }, [lessons]);
   useEffect(() => { localStorage.setItem('clinicops_user_achievements_v2', JSON.stringify(achievements)); }, [achievements]);
   useEffect(() => { localStorage.setItem('clinicops_user_points_v2', userPoints.toString()); }, [userPoints]);
@@ -1353,22 +1430,121 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   // Game & Learning Actions
-  const saveGameScore = (gameId: string, score: number) => {
-    setUserScores(prev => {
-      const currentHigh = prev[gameId] || 0;
-      return score > currentHigh ? { ...prev, [gameId]: score } : prev;
+  const todayKey = () => new Date().toISOString().slice(0, 10);
+
+  // Daily streak is only advanced by genuine gameplay / habit actions, once per calendar day.
+  const markDailyActivity = () => {
+    const today = todayKey();
+    const last = localStorage.getItem('clinicops_last_activity_date_v2');
+    if (last === today) return false;
+
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    setUserStreak(prev => {
+      if (last === yesterday) return prev + 1;
+      if (!last) return Math.max(1, prev);
+      return 1;
     });
+    localStorage.setItem('clinicops_last_activity_date_v2', today);
+    return true;
+  };
 
-    const ptsEarned = Math.round(score);
-    setUserPoints(prev => prev + ptsEarned);
+  const readLedger = (): string[] => {
+    try {
+      const raw = localStorage.getItem('clinicops_points_ledger_v2');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  };
 
-    // Update achievements if qualified
-    setAchievements(prev => prev.map(a => {
-      if (a.id === '4' && gameId === 'balanced-eating') {
-        return { ...a, unlocked: true, dateUnlocked: 'Earned Today' };
-      }
-      return a;
+  const awardPoints = (amount: number, options: AwardOptions = {}): number => {
+    const points = Math.max(0, Math.round(amount));
+    if (points === 0) return 0;
+
+    if (options.uniqueKey) {
+      const ledger = readLedger();
+      if (ledger.includes(options.uniqueKey)) return 0;
+      ledger.push(options.uniqueKey);
+      localStorage.setItem('clinicops_points_ledger_v2', JSON.stringify(ledger.slice(-1000)));
+      setPointsLedger(ledger.slice(-1000));
+    }
+
+    setUserPoints(prev => prev + points);
+    markDailyActivity();
+    return points;
+  };
+
+  const retractPoints = (amount: number, uniqueKey: string): number => {
+    const points = Math.max(0, Math.round(amount));
+    const ledger = readLedger();
+    if (!ledger.includes(uniqueKey)) return 0;
+
+    const nextLedger = ledger.filter(k => k !== uniqueKey);
+    localStorage.setItem('clinicops_points_ledger_v2', JSON.stringify(nextLedger));
+    setPointsLedger(nextLedger);
+    setUserPoints(prev => Math.max(0, prev - points));
+    return points;
+  };
+
+  const unlockAchievement = (achievementId: string): boolean => {
+    const target = achievements.find(a => a.id === achievementId);
+    if (!target || target.unlocked) return false;
+
+    const label = `Earned ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}`;
+    setAchievements(prev => prev.map(a =>
+      a.id === achievementId && !a.unlocked
+        ? { ...a, unlocked: true, dateUnlocked: label }
+        : a
+    ));
+    return true;
+  };
+
+  const recordGameResult = (
+    gameId: string,
+    score: number,
+    options: GameResultOptions = {}
+  ): GameResult => {
+    const roundedScore = Math.max(0, Math.round(score));
+    const previousBest = userScores[gameId] || 0;
+    const bestScore = Math.max(previousBest, roundedScore);
+    const isNewBest = roundedScore > previousBest;
+
+    setUserScores(prev => ({
+      ...prev,
+      [gameId]: Math.max(prev[gameId] || 0, roundedScore)
     }));
+
+    setGamePlayCounts(prev => ({ ...prev, [gameId]: (prev[gameId] || 0) + 1 }));
+
+    setGameHistory(prev => [
+      {
+        id: `g-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        gameId,
+        score: roundedScore,
+        completed: Boolean(options.completed),
+        date: new Date().toISOString()
+      },
+      ...prev
+    ].slice(0, 80));
+
+    let awarded = 0;
+    if (options.completed && options.bonusPoints && options.bonusPoints > 0) {
+      awarded = awardPoints(options.bonusPoints, {
+        uniqueKey: options.bonusKey,
+        gameId,
+        reason: 'Game completion'
+      });
+    } else {
+      // Still counts as a real activity for the daily streak.
+      markDailyActivity();
+    }
+
+    return { awarded, bestScore, isNewBest };
+  };
+
+  // Kept for backwards compatibility. New game code should use awardPoints + recordGameResult.
+  const saveGameScore = (gameId: string, score: number) => {
+    recordGameResult(gameId, score, { completed: false });
   };
 
   const startLesson = (lessonId: string) => {
@@ -1389,26 +1565,43 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const toggleHabit = (habitId: string) => {
-    let earned = 0;
-    let willComplete = false;
-    setHabits((prev: HealthHabit[]) => prev.map((h: HealthHabit) => {
-      if (h.id === habitId) {
-        willComplete = !h.completed;
-        earned = willComplete ? h.points : -h.points;
-        return { ...h, completed: willComplete };
-      }
-      return h;
-    }));
+    const habit = habits.find(h => h.id === habitId);
+    if (!habit) return { completed: false, pointsEarned: 0 };
 
-    if (earned > 0) {
-      setUserPoints(prev => prev + earned);
+    const willComplete = !habit.completed;
+    const ledgerKey = `habit:${habitId}:${todayKey()}`;
+
+    setHabits((prev: HealthHabit[]) => prev.map((h: HealthHabit) =>
+      h.id === habitId ? { ...h, completed: willComplete } : h
+    ));
+
+    if (willComplete) {
+      const earned = awardPoints(habit.points, { uniqueKey: ledgerKey, reason: habit.label });
+      return { completed: true, pointsEarned: earned };
     }
-    return { completed: willComplete, pointsEarned: earned };
+
+    // Only retract points that were actually paid out (protects pre-seeded demo habits).
+    const retracted = retractPoints(habit.points, ledgerKey);
+    return { completed: false, pointsEarned: -retracted };
   };
 
   const toggleSound = () => {
     setSoundEnabled(prev => !prev);
   };
+
+  const setSoundVolume = (volume: number) => {
+    setSoundVolumeState(Math.min(1, Math.max(0, volume)));
+  };
+
+  // Habits are daily: clear completions when a new calendar day starts.
+  useEffect(() => {
+    const today = todayKey();
+    const storedDay = localStorage.getItem('clinicops_habits_day_v2');
+    if (storedDay && storedDay !== today) {
+      setHabits(prev => prev.map(h => ({ ...h, completed: false })));
+    }
+    localStorage.setItem('clinicops_habits_day_v2', today);
+  }, []);
 
   const value: DataContextType = {
     patients,
@@ -1456,6 +1649,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     games: initialGames,
     userScores,
     saveGameScore,
+    gameHistory,
+    gamePlayCounts,
+    recordGameResult,
+    awardPoints,
+    retractPoints,
     habits,
     toggleHabit,
 
@@ -1465,9 +1663,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
     userStreak,
     startLesson,
     completeLesson,
+    unlockAchievement,
 
     soundEnabled,
     toggleSound,
+    soundVolume,
+    setSoundVolume,
     activeClinic,
     setActiveClinic,
 
