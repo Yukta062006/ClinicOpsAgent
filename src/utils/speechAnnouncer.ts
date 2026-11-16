@@ -64,36 +64,65 @@ export function getFemaleSpeechVoice(lang: 'en' | 'hi' | 'mr'): SpeechSynthesisV
     let score = 0;
 
     if (targetLang === 'hi') {
-      if (voiceLang === 'hi-in' || voiceLang.startsWith('hi')) score += 100;
-      else return -1000;
+      const isHi = voiceLang === 'hi-in' || voiceLang.startsWith('hi') || name.includes('हिन्दी') || name.includes('hindi');
+      if (!isHi) return -1000;
+      score += 100;
+
+      // 1. Ultra-high quality Azure Neural voice: Microsoft Swara Online (Natural)
+      if (name.includes('swara') && isNaturalOrNeural(name)) {
+        score += 95;
+      } else if (name.includes('swara')) {
+        score += 75;
+      }
+
+      // 2. High-quality Google Neural voice in Chrome/Android: Google हिन्दी / Google Hindi / hi-in-x-hie-*
+      if (name.includes('google') || name.includes('x-hie')) {
+        score += 90;
+      }
+
+      // 3. Apple Enhanced/Premium natural voice: Lekha / Kavya / Ananya
+      if (name.includes('lekha') || name.includes('kavya') || name.includes('ananya')) {
+        score += 80;
+      }
+
+      // 4. Any other Natural / Online / Neural Hindi voice
+      if (isNaturalOrNeural(name)) {
+        score += 40;
+      }
+
+      // 5. Desktop offline fallback (Kalpana): reliable local fallback, ranked behind neural voices
+      if (name.includes('kalpana')) {
+        score += 25;
+      }
     } else if (targetLang === 'mr') {
-      if (voiceLang === 'mr-in' || voiceLang.startsWith('mr')) score += 100;
-      // High-quality fallback: Hindi Devanagari female voice if native Marathi voice is not installed
-      else if (voiceLang === 'hi-in' || voiceLang.startsWith('hi')) score += 55;
-      else return -1000;
+      const isMr = voiceLang === 'mr-in' || voiceLang.startsWith('mr') || name.includes('मराठी') || name.includes('marathi');
+      if (isMr) {
+        score += 100;
+        if (name.includes('aarohi') && isNaturalOrNeural(name)) score += 90;
+        else if (name.includes('aarohi')) score += 70;
+        if (name.includes('google')) score += 85;
+        if (isNaturalOrNeural(name)) score += 35;
+      } else if (voiceLang === 'hi-in' || voiceLang.startsWith('hi') || name.includes('हिन्दी') || name.includes('hindi')) {
+        // High-quality fallback: Hindi Devanagari female voice if native Marathi voice is not installed
+        score += 55;
+        if (name.includes('swara') && isNaturalOrNeural(name)) score += 35;
+        if (name.includes('google')) score += 30;
+      } else {
+        return -1000;
+      }
     } else {
       // English: Prioritize Indian English (en-IN), then natural international English
       if (voiceLang === 'en-in') score += 100;
       else if (name.includes('india')) score += 90;
       else if (voiceLang.startsWith('en')) score += 45;
       else return -1000;
-    }
 
-    // High fidelity: Microsoft Online (Natural) or Google neural voices
-    if (isNaturalOrNeural(name)) score += 35;
+      if (isNaturalOrNeural(name)) score += 35;
+      if (isPreferredFemale(name)) score += 30;
 
-    // Verified professional female vocal profile
-    if (isPreferredFemale(name)) score += 30;
-
-    // Highest preference for warm, pleasant clinic voices
-    if (targetLang === 'en' && (name.includes('neerja') || name.includes('priya') || name.includes('heera') || name.includes('veena'))) {
-      score += 45;
-    }
-    if (targetLang === 'hi' && (name.includes('swara') || name.includes('kalpana') || name.includes('lekha'))) {
-      score += 45;
-    }
-    if (targetLang === 'mr' && (name.includes('aarohi') || name.includes('marathi'))) {
-      score += 45;
+      if (name.includes('neerja') || name.includes('priya') || name.includes('heera') || name.includes('veena')) {
+        score += 45;
+      }
     }
 
     // Minor penalty for legacy harsh desktop SAPI synthesizers
@@ -188,6 +217,183 @@ export function stopAnnouncement(): void {
   }
 }
 
+// Pre-warm browser speech synthesis voice list if available
+if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  try {
+    window.speechSynthesis.getVoices();
+    window.speechSynthesis.addEventListener?.('voiceschanged', () => {
+      window.speechSynthesis.getVoices();
+    });
+  } catch {
+    // Ignore in non-browser or test mock environments
+  }
+}
+
+/**
+ * Devanagari digit words for natural, fluent Hindi pronunciation.
+ */
+export const HINDI_DIGIT_WORDS: Record<string, string> = {
+  '0': 'शून्य',
+  '1': 'एक',
+  '2': 'दो',
+  '3': 'तीन',
+  '4': 'चार',
+  '5': 'पाँच',
+  '6': 'छह',
+  '7': 'सात',
+  '8': 'आठ',
+  '9': 'नौ',
+};
+
+/**
+ * Devanagari phonetic representations of English alphabet letters for clinic tokens.
+ */
+export const HINDI_LETTER_WORDS: Record<string, string> = {
+  a: 'ए',
+  b: 'बी',
+  c: 'सी',
+  d: 'डी',
+  e: 'ई',
+  f: 'एफ़',
+  g: 'जी',
+  h: 'एच',
+  i: 'आई',
+  j: 'जे',
+  k: 'के',
+  l: 'एल',
+  m: 'एम',
+  n: 'एन',
+  o: 'ओ',
+  p: 'पी',
+  q: 'क्यू',
+  r: 'आर',
+  s: 'एस',
+  t: 'टी',
+  u: 'यू',
+  v: 'वी',
+  w: 'डब्लू',
+  x: 'एक्स',
+  y: 'वाई',
+  z: 'ज़ेड',
+};
+
+/**
+ * Devanagari digit words for natural Marathi pronunciation.
+ */
+export const MARATHI_DIGIT_WORDS: Record<string, string> = {
+  '0': 'शून्य',
+  '1': 'एक',
+  '2': 'दोन',
+  '3': 'तीन',
+  '4': 'चार',
+  '5': 'पाच',
+  '6': 'सहा',
+  '7': 'सात',
+  '8': 'आठ',
+  '9': 'नऊ',
+};
+
+/**
+ * Formats token string for authentic, natural Hindi spoken pronunciation.
+ * E.g., '001' -> 'शून्य शून्य एक', '042' -> 'शून्य चार दो', 'GM-001' -> 'जी एम शून्य शून्य एक'
+ */
+export function formatTokenForHindi(rawToken: string): string {
+  if (!rawToken) return 'शून्य शून्य एक';
+  const cleaned = rawToken.trim().replace(/[-_/]/g, ' ');
+  const words: string[] = [];
+
+  for (const char of cleaned) {
+    if (char === ' ') continue;
+    const digit = HINDI_DIGIT_WORDS[char];
+    if (digit) {
+      words.push(digit);
+      continue;
+    }
+    const letter = HINDI_LETTER_WORDS[char.toLowerCase()];
+    if (letter) {
+      words.push(letter);
+      continue;
+    }
+    words.push(char);
+  }
+
+  return words.join(' ');
+}
+
+/**
+ * Formats token string for authentic Marathi spoken pronunciation.
+ * E.g., '002' -> 'शून्य शून्य दोन', 'A-012' -> 'ए शून्य एक दोन'
+ */
+export function formatTokenForMarathi(rawToken: string): string {
+  if (!rawToken) return 'शून्य शून्य एक';
+  const cleaned = rawToken.trim().replace(/[-_/]/g, ' ');
+  const words: string[] = [];
+
+  for (const char of cleaned) {
+    if (char === ' ') continue;
+    const digit = MARATHI_DIGIT_WORDS[char];
+    if (digit) {
+      words.push(digit);
+      continue;
+    }
+    const letter = HINDI_LETTER_WORDS[char.toLowerCase()];
+    if (letter) {
+      words.push(letter);
+      continue;
+    }
+    words.push(char);
+  }
+
+  return words.join(' ');
+}
+
+/**
+ * Formats room for polite Hindi announcement.
+ * E.g., 'Room 02' -> 'कमरा नंबर दो', 'Room 1' -> 'कमरा नंबर एक', 'Consultation Room' -> 'परामर्श कक्ष'
+ */
+export function formatRoomForHindi(room?: string): string {
+  if (!room || room === 'the consultation room') {
+    return 'परामर्श कक्ष';
+  }
+  const trimmed = room.trim();
+  const roomMatch = trimmed.match(/^(?:room|कमरा)\s*(?:no\.?|number|नंबर)?\s*0?(\d+)$/i);
+  if (roomMatch) {
+    const num = roomMatch[1];
+    const hindiNum = HINDI_DIGIT_WORDS[num] || num;
+    return `कमरा नंबर ${hindiNum}`;
+  }
+  const counterMatch = trimmed.match(/^(?:counter|काउंटर)\s*(?:no\.?|number|नंबर)?\s*0?(\d+)$/i);
+  if (counterMatch) {
+    const num = counterMatch[1];
+    const hindiNum = HINDI_DIGIT_WORDS[num] || num;
+    return `काउंटर नंबर ${hindiNum}`;
+  }
+  const consultMatch = trimmed.match(/^consultation\s*room\s*0?(\d+)$/i);
+  if (consultMatch) {
+    const num = consultMatch[1];
+    const hindiNum = HINDI_DIGIT_WORDS[num] || num;
+    return `परामर्श कक्ष ${hindiNum}`;
+  }
+  return trimmed;
+}
+
+/**
+ * Formats room for polite Marathi announcement.
+ */
+export function formatRoomForMarathi(room?: string): string {
+  if (!room || room === 'the consultation room') {
+    return 'तपासणी कक्षात';
+  }
+  const trimmed = room.trim();
+  const roomMatch = trimmed.match(/^(?:room|खोली)\s*(?:no\.?|number|क्रमांक)?\s*0?(\d+)$/i);
+  if (roomMatch) {
+    const num = roomMatch[1];
+    const marathiNum = MARATHI_DIGIT_WORDS[num] || num;
+    return `खोली क्रमांक ${marathiNum} मध्ये`;
+  }
+  return 'तपासणी कक्षात';
+}
+
 /**
  * Formats token string for natural spoken clarity.
  * E.g., 'GM-001' -> 'G M 001', '001' -> '001', 'A-002' -> 'A 002'
@@ -236,22 +442,25 @@ export async function announcePatientCalling(options: AnnouncePatientOptions): P
 
   let announcementText = '';
   if (language === 'hi') {
-    // Exact requested Hindi template
-    announcementText = `टोकन नंबर ${spokenToken}, कृपया परामर्श कक्ष में आएं।`;
+    const hindiToken = formatTokenForHindi(token);
+    const hindiRoom = formatRoomForHindi(room);
+    // Respectful, polite clinic announcement with 'आइए' (formal respectful imperative)
+    announcementText = `टोकन नंबर ${hindiToken}, कृपया ${hindiRoom} में आइए।`;
     if (patientName && patientName !== 'Registered Patient') {
-      announcementText = `टोकन नंबर ${spokenToken}, ${patientName}, कृपया परामर्श कक्ष में आएं।`;
+      announcementText = `टोकन नंबर ${hindiToken}, ${patientName}, कृपया ${hindiRoom} में आइए।`;
     }
   } else if (language === 'mr') {
-    // Exact requested Marathi template
-    announcementText = `टोकन क्रमांक ${spokenToken}, कृपया तपासणी कक्षात या.`;
+    const marathiToken = formatTokenForMarathi(token);
+    const marathiRoom = formatRoomForMarathi(room);
+    announcementText = `टोकन क्रमांक ${marathiToken}, कृपया ${marathiRoom} या.`;
     if (patientName && patientName !== 'Registered Patient') {
-      announcementText = `टोकन क्रमांक ${spokenToken}, ${patientName}, कृपया तपासणी कक्षात या.`;
+      announcementText = `टोकन क्रमांक ${marathiToken}, ${patientName}, कृपया ${marathiRoom} या.`;
     }
   } else {
-    // Exact requested English template
-    announcementText = `Token number ${spokenToken}, please proceed to the consultation room.`;
+    // English template
+    announcementText = `Token number ${spokenToken}, please proceed to ${roomName}.`;
     if (patientName && patientName !== 'Registered Patient') {
-      announcementText = `Token number ${spokenToken}, ${patientName}, please proceed to the consultation room.`;
+      announcementText = `Token number ${spokenToken}, ${patientName}, please proceed to ${roomName}.`;
     }
   }
 
@@ -319,7 +528,7 @@ function fallbackWebSpeech(
   volume: number = 0.95,
   onEnd?: () => void
 ) {
-  if (!('speechSynthesis' in window)) {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
     onEnd?.();
     return;
   }
@@ -337,9 +546,18 @@ function fallbackWebSpeech(
       }
     }
 
-    // Calm, clear clinic cadence (avoids rushed or robotic speech)
-    utterance.rate = Math.max(0.7, Math.min(speed * 0.90, 1.25));
-    utterance.pitch = 1.0; // Natural acoustic resonance
+    // Tuning rate and pitch specifically for authentic language cadence
+    if (language === 'hi') {
+      // Natural conversational cadence for Hindi Devanagari phonetics (avoids dragging or rushing)
+      utterance.rate = Math.max(0.85, Math.min(speed * 0.98, 1.15));
+      utterance.pitch = 1.0;
+    } else if (language === 'mr') {
+      utterance.rate = Math.max(0.85, Math.min(speed * 0.96, 1.15));
+      utterance.pitch = 1.0;
+    } else {
+      utterance.rate = Math.max(0.80, Math.min(speed * 0.92, 1.25));
+      utterance.pitch = 1.0;
+    }
     utterance.volume = Math.max(0, Math.min(volume, 1.0));
 
     utterance.onend = () => onEnd?.();

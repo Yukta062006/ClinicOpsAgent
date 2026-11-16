@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getFemaleSpeechVoice, formatSpokenToken } from '../src/utils/speechAnnouncer';
+import { 
+  getFemaleSpeechVoice, 
+  formatSpokenToken, 
+  formatTokenForHindi, 
+  formatTokenForMarathi,
+  formatRoomForHindi,
+  formatRoomForMarathi,
+  announcePatientCalling
+} from '../src/utils/speechAnnouncer';
 
 describe('Voice Quality and Selection Suite', () => {
   const mockVoices: any[] = [
@@ -56,6 +64,15 @@ describe('Voice Quality and Selection Suite', () => {
     expect(voice?.lang).toBe('hi-IN');
   });
 
+  it('selects Google हिन्दी in Chrome environment when Swara is not present', () => {
+    const chromeVoices = mockVoices.filter(v => !v.name.includes('Swara'));
+    (window.speechSynthesis.getVoices as any).mockReturnValue(chromeVoices);
+
+    const voice = getFemaleSpeechVoice('hi');
+    expect(voice).not.toBeNull();
+    expect(voice?.name).toBe('Google हिन्दी');
+  });
+
   it('selects natural Marathi female voice (Aarohi) when available', () => {
     const voice = getFemaleSpeechVoice('mr');
     expect(voice).not.toBeNull();
@@ -79,4 +96,51 @@ describe('Voice Quality and Selection Suite', () => {
     expect(formatSpokenToken('GM-001')).toBe('G M 001');
     expect(formatSpokenToken('A-012')).toBe('A 012');
   });
+
+  it('formats tokens into authentic Devanagari words for natural Hindi speech synthesis', () => {
+    expect(formatTokenForHindi('001')).toBe('शून्य शून्य एक');
+    expect(formatTokenForHindi('042')).toBe('शून्य चार दो');
+    expect(formatTokenForHindi('A-012')).toBe('ए शून्य एक दो');
+    expect(formatTokenForHindi('GM-001')).toBe('जी एम शून्य शून्य एक');
+    expect(formatTokenForHindi('OPD-005')).toBe('ओ पी डी शून्य शून्य पाँच');
+  });
+
+  it('formats tokens into authentic Devanagari words for Marathi speech synthesis', () => {
+    expect(formatTokenForMarathi('001')).toBe('शून्य शून्य एक');
+    expect(formatTokenForMarathi('002')).toBe('शून्य शून्य दोन');
+    expect(formatTokenForMarathi('A-012')).toBe('ए शून्य एक दोन');
+    expect(formatTokenForMarathi('GM-006')).toBe('जी एम शून्य शून्य सहा');
+  });
+
+  it('formats room cleanly into respectful Hindi phrases', () => {
+    expect(formatRoomForHindi('Room 02')).toBe('कमरा नंबर दो');
+    expect(formatRoomForHindi('Room 1')).toBe('कमरा नंबर एक');
+    expect(formatRoomForHindi('Counter 3')).toBe('काउंटर नंबर तीन');
+    expect(formatRoomForHindi('Consultation Room 04')).toBe('परामर्श कक्ष चार');
+    expect(formatRoomForHindi('the consultation room')).toBe('परामर्श कक्ष');
+    expect(formatRoomForHindi(undefined)).toBe('परामर्श कक्ष');
+  });
+
+  it('generates polite, natural hospital announcement text in Hindi', async () => {
+    const res = await announcePatientCalling({
+      token: '001',
+      patientName: 'Registered Patient',
+      room: 'Room 02',
+      language: 'hi',
+    });
+
+    expect(res.text).toBe('टोकन नंबर शून्य शून्य एक, कृपया कमरा नंबर दो में आइए।');
+  });
+
+  it('generates polite hospital announcement text in Marathi', async () => {
+    const res = await announcePatientCalling({
+      token: '002',
+      patientName: 'Registered Patient',
+      room: 'Room 02',
+      language: 'mr',
+    });
+
+    expect(res.text).toBe('टोकन क्रमांक शून्य शून्य दोन, कृपया खोली क्रमांक दोन मध्ये या.');
+  });
 });
+

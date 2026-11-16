@@ -282,7 +282,10 @@ export default function ResearchSummary() {
       }
 
       // Smooth, natural reading cadence with natural vocal pitch
-      utterance.rate = Math.max(0.7, Math.min(speechSpeed * 0.90, 1.3))
+      const isHi = selectedLanguage === 'hi'
+      const isMr = selectedLanguage === 'mr'
+      const rateMultiplier = isHi ? 0.98 : (isMr ? 0.96 : 0.92)
+      utterance.rate = Math.max(0.75, Math.min(speechSpeed * rateMultiplier, 1.25))
       utterance.pitch = 1.0
       utterance.volume = isMuted ? 0 : volume
 
@@ -330,9 +333,9 @@ export default function ResearchSummary() {
     // Build the narrative text purely in the selected language using pre-translated content
     let textToRead = ''
     if (selectedLanguage === 'hi') {
-      textToRead = `डैश (DASH) आहार और रक्तचाप नियंत्रण अध्ययन। ${currentContent.bigPictureTitle} ${currentContent.callout} ${currentContent.q1Title}: ${currentContent.q1Text} ${currentContent.q3Title}: ${currentContent.q3Text} ${currentContent.findingsTitle}: ${currentContent.findings.join('. ')}`
+      textToRead = `डैश आहार और रक्तचाप नियंत्रण अध्ययन। ${currentContent.bigPictureTitle} ${currentContent.callout} ${currentContent.q1Title}: ${currentContent.q1Text} ${currentContent.q3Title}: ${currentContent.q3Text} ${currentContent.findingsTitle}: ${currentContent.findings.join('. ')}`
     } else if (selectedLanguage === 'mr') {
-      textToRead = `डॅश (DASH) आहार आणि रक्तदाब नियंत्रण अभ्यास। ${currentContent.bigPictureTitle} ${currentContent.callout} ${currentContent.q1Title}: ${currentContent.q1Text} ${currentContent.q3Title}: ${currentContent.q3Text} ${currentContent.findingsTitle}: ${currentContent.findings.join('. ')}`
+      textToRead = `डॅश आहार आणि रक्तदाब नियंत्रण अभ्यास। ${currentContent.bigPictureTitle} ${currentContent.callout} ${currentContent.q1Title}: ${currentContent.q1Text} ${currentContent.q3Title}: ${currentContent.q3Text} ${currentContent.findingsTitle}: ${currentContent.findings.join('. ')}`
     } else {
       textToRead = `${safeArticle.title}. ${currentContent.bigPictureTitle}. ${currentContent.callout}. ${currentContent.q1Title}: ${currentContent.q1Text}. ${currentContent.q3Title}: ${currentContent.q3Text}. ${currentContent.findingsTitle}: ${currentContent.findings.join('. ')}`
     }
