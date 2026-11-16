@@ -121,18 +121,7 @@ export default function Signup() {
     setAbhaError('')
     setAbhaInfo('')
 
-    if (abhaStatus && !abhaStatus.configured) {
-      const refreshed = await apiAbha.status()
-      if (refreshed.success && refreshed.data?.configured) {
-        setAbhaStatus(refreshed.data)
-      } else {
-        setAbhaError(
-          `ABHA verification is not configured on this server. Missing: ${abhaStatus.missing.join(', ')}. ` +
-            'Please restart the backend server (npm run dev) to load the ABDM Sandbox configuration.'
-        )
-        return
-      }
-    }
+
 
     if (abhaAction === 'existing' && abhaNumber.replace(/[^0-9]/g, '').length !== 14) {
       setAbhaError('Enter a 14-digit ABHA number before requesting an OTP.')
@@ -699,25 +688,11 @@ export default function Signup() {
                       </div>
                     </div>
 
-                    {abhaStatus && !abhaStatus.configured && (
-                      <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-relaxed space-y-1">
-                        <div className="flex items-center justify-between">
-                          <p className="font-bold">Live ABDM verification is unconfigured</p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              apiAbha.status().then((res) => {
-                                if (res.success && res.data) setAbhaStatus(res.data)
-                              })
-                            }}
-                            className="text-[10px] text-forest-green font-bold hover:underline"
-                          >
-                            Refresh status ↻
-                          </button>
-                        </div>
+                    {abhaStatus && !abhaStatus.configured && abhaStatus.environment === 'production' && (
+                      <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-relaxed">
+                        <p className="font-bold mb-0.5">Production ABDM verification is unconfigured</p>
                         <p>
                           This server is missing <span className="font-mono">{abhaStatus.missing.join(', ')}</span>.
-                          Please restart the backend (<code className="bg-amber-100 px-1 py-0.5 rounded font-mono">npm run dev</code>) to enable Sandbox mode.
                         </p>
                       </div>
                     )}

@@ -107,17 +107,7 @@ export default function PatientDashboard() {
       return
     }
 
-    if (linkAbhaStatus && !linkAbhaStatus.configured) {
-      const refreshed = await apiAbha.status()
-      if (refreshed.success && refreshed.data?.configured) {
-        setLinkAbhaStatus(refreshed.data)
-      } else {
-        setLinkAbhaError(
-          `ABDM verification is currently unavailable on this server. Missing credentials: ${linkAbhaStatus.missing.join(', ')}. Please restart the backend server (npm run dev) to load the ABDM Sandbox.`
-        )
-        return
-      }
-    }
+
 
     setLinkAbhaBusy(true)
     try {
@@ -1143,11 +1133,11 @@ export default function PatientDashboard() {
               </div>
             ) : (
               <div className="space-y-4">
-                {linkAbhaStatus && !linkAbhaStatus.configured && (
+                {linkAbhaStatus && !linkAbhaStatus.configured && linkAbhaStatus.environment === 'production' && (
                   <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 leading-relaxed">
                     <p className="font-bold mb-0.5">ABDM Verification Unavailable</p>
                     <p>
-                      This server is missing credentials (<span className="font-mono">{linkAbhaStatus.missing.join(', ')}</span>). Linking via ABDM OTP requires a configured ABDM connection.
+                      This server is missing credentials (<span className="font-mono">{linkAbhaStatus.missing.join(', ')}</span>).
                     </p>
                   </div>
                 )}

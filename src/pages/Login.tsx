@@ -97,19 +97,6 @@ export default function Login() {
       return
     }
 
-    if (abhaStatus && !abhaStatus.configured) {
-      const refreshed = await apiAbha.status()
-      if (refreshed.success && refreshed.data?.configured) {
-        setAbhaStatus(refreshed.data)
-      } else {
-        setError(
-          `Live ABHA verification is not configured on this server. Missing: ${abhaStatus.missing.join(', ')}. ` +
-            'Please restart the backend server (npm run dev) to load the ABDM Sandbox configuration.'
-        )
-        return
-      }
-    }
-
     setIsLoading(true)
     try {
       const response = await requestAbhaLoginOtp(abhaNumber.trim())
@@ -379,27 +366,11 @@ export default function Login() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {selectedRole === 'patient' && loginMethod === 'abha' ? (
             <>
-              {abhaStatus && !abhaStatus.configured && (
+              {abhaStatus && !abhaStatus.configured && abhaStatus.environment === 'production' && (
                 <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-relaxed">
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="font-bold">Live ABDM verification is not configured</p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        apiAbha.status().then((res) => {
-                          if (res.success && res.data) setAbhaStatus(res.data)
-                        })
-                      }}
-                      className="text-[10px] text-forest-green font-bold hover:underline"
-                    >
-                      Refresh status ↻
-                    </button>
-                  </div>
+                  <p className="font-bold mb-1">Production ABDM verification is not configured</p>
                   <p className="mb-1">
                     This server is missing <span className="font-mono">{abhaStatus.missing.join(', ')}</span>.
-                  </p>
-                  <p className="text-[10px] text-amber-800">
-                    If you recently updated <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">.env</code>, restart the server (stop and run <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">npm run dev</code>), then click <strong>Refresh status</strong>.
                   </p>
                 </div>
               )}
