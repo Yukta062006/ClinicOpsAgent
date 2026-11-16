@@ -14,41 +14,113 @@ export interface AnnouncePatientOptions {
 }
 
 /**
- * Returns a high-quality natural female voice for Web Speech fallback.
+ * Returns a high-quality, soft, pleasant and professional female voice for Web Speech.
+ * Prioritizes modern Natural/Neural voices (e.g., Microsoft Neerja/Swara/Aarohi/Jenny,
+ * Google Indic/UK/US Female, Apple Veena/Lekha) and strictly avoids harsh, robotic, or male voices.
  */
 export function getFemaleSpeechVoice(lang: 'en' | 'hi' | 'mr'): SpeechSynthesisVoice | null {
-  if (!('speechSynthesis' in window)) return null;
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
   const voices = window.speechSynthesis.getVoices();
   if (!voices || voices.length === 0) return null;
 
-  const isFemale = (v: SpeechSynthesisVoice) => {
-    const lower = (v.name + ' ' + (v as any).voiceURI || '').toLowerCase();
-    if (lower.includes('male') && !lower.includes('female')) return false;
-    if (lower.includes('david') || lower.includes('rishi') || lower.includes('mark') || 
-        lower.includes('george') || lower.includes('james') || lower.includes('daniel')) {
-      return false;
-    }
-    if (lower.includes('female') || lower.includes('zira') || lower.includes('heera') || 
-        lower.includes('neerja') || lower.includes('veena') || lower.includes('swara') || 
-        lower.includes('priya') || lower.includes('jenny') || lower.includes('samantha')) {
-      return true;
-    }
-    return true; // Neutral fallback
+  // Explicit male identifiers to strictly disqualify
+  const MALE_IDENTIFIERS = [
+    'male', 'david', 'rishi', 'mark', 'george', 'james', 'guy', 'stefan',
+    'daniel', 'richard', 'hemant', 'madhur', 'alex', 'fred', 'oliver',
+    'rory', 'arthur', 'tom', 'lee', 'pradeep', 'anil', 'ravi'
+  ];
+
+  // Preferred natural, soft, professional female voice keywords
+  const PREFERRED_FEMALE_TOKENS = [
+    'neerja', 'swara', 'aarohi', 'priya', 'heera', 'kalpana', 'veena',
+    'lekha', 'isha', 'sangeeta', 'jenny', 'aria', 'sonia', 'libby',
+    'samantha', 'serena', 'victoria', 'karen', 'shree', 'female'
+  ];
+
+  const isExcludedMale = (name: string): boolean => {
+    const lower = name.toLowerCase();
+    // Do not flag words like "female" simply because they contain "male"
+    if (lower.includes('female')) return false;
+    return MALE_IDENTIFIERS.some(id => lower.includes(id));
   };
 
-  if (lang === 'hi') {
-    return voices.find(v => (v.lang === 'hi-IN' || v.lang.startsWith('hi')) && isFemale(v)) ||
-           voices.find(v => v.lang === 'hi-IN' || v.lang.startsWith('hi')) || null;
-  }
-  if (lang === 'mr') {
-    return voices.find(v => (v.lang === 'mr-IN' || v.lang.startsWith('mr')) && isFemale(v)) ||
-           voices.find(v => (v.lang === 'hi-IN' || v.lang.startsWith('hi')) && isFemale(v)) || null;
+  const isPreferredFemale = (name: string): boolean => {
+    const lower = name.toLowerCase();
+    return PREFERRED_FEMALE_TOKENS.some(token => lower.includes(token));
+  };
+
+  const isNaturalOrNeural = (name: string): boolean => {
+    const lower = name.toLowerCase();
+    return lower.includes('natural') || lower.includes('online') || lower.includes('neural') || lower.includes('google');
+  };
+
+  // Score candidate voices to select the softest, clearest, most professional female voice
+  const scoreVoice = (v: SpeechSynthesisVoice, targetLang: 'en' | 'hi' | 'mr'): number => {
+    const name = (v.name + ' ' + (v as any).voiceURI || '').toLowerCase();
+    const voiceLang = (v.lang || '').toLowerCase().replace(/_/g, '-');
+
+    if (isExcludedMale(name)) return -1000;
+
+    let score = 0;
+
+    if (targetLang === 'hi') {
+      if (voiceLang === 'hi-in' || voiceLang.startsWith('hi')) score += 100;
+      else return -1000;
+    } else if (targetLang === 'mr') {
+      if (voiceLang === 'mr-in' || voiceLang.startsWith('mr')) score += 100;
+      // High-quality fallback: Hindi Devanagari female voice if native Marathi voice is not installed
+      else if (voiceLang === 'hi-in' || voiceLang.startsWith('hi')) score += 55;
+      else return -1000;
+    } else {
+      // English: Prioritize Indian English (en-IN), then natural international English
+      if (voiceLang === 'en-in') score += 100;
+      else if (name.includes('india')) score += 90;
+      else if (voiceLang.startsWith('en')) score += 45;
+      else return -1000;
+    }
+
+    // High fidelity: Microsoft Online (Natural) or Google neural voices
+    if (isNaturalOrNeural(name)) score += 35;
+
+    // Verified professional female vocal profile
+    if (isPreferredFemale(name)) score += 30;
+
+    // Highest preference for warm, pleasant clinic voices
+    if (targetLang === 'en' && (name.includes('neerja') || name.includes('priya') || name.includes('heera') || name.includes('veena'))) {
+      score += 45;
+    }
+    if (targetLang === 'hi' && (name.includes('swara') || name.includes('kalpana') || name.includes('lekha'))) {
+      score += 45;
+    }
+    if (targetLang === 'mr' && (name.includes('aarohi') || name.includes('marathi'))) {
+      score += 45;
+    }
+
+    // Minor penalty for legacy harsh desktop SAPI synthesizers
+    if (name.includes('desktop') || name.includes('espeak')) {
+      score -= 25;
+    }
+
+    return score;
+  };
+
+  const scored = voices
+    .map(v => ({ voice: v, score: scoreVoice(v, lang) }))
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (scored.length > 0) {
+    return scored[0].voice;
   }
 
-  // English: Prioritize Indian English female (e.g. Heera, Neerja, Veena), then natural English female
-  return voices.find(v => (v.lang === 'en-IN' || v.name.toLowerCase().includes('india')) && isFemale(v)) ||
-         voices.find(v => v.lang.startsWith('en') && isFemale(v)) ||
-         voices[0] || null;
+  // Graceful multi-tiered fallback without breaking announcements
+  const langPrefix = lang === 'en' ? 'en' : (lang === 'hi' ? 'hi' : 'mr');
+  const fallback = voices.find(v => v.lang.toLowerCase().startsWith(langPrefix) && !isExcludedMale(v.name)) ||
+                   (lang === 'mr' ? voices.find(v => v.lang.toLowerCase().startsWith('hi') && !isExcludedMale(v.name)) : null) ||
+                   voices.find(v => v.lang.toLowerCase().startsWith('en') && !isExcludedMale(v.name)) ||
+                   voices[0] || null;
+
+  return fallback;
 }
 
 /**
@@ -125,6 +197,7 @@ export function formatSpokenToken(rawToken: string): string {
   return rawToken
     .replace(/^([A-Za-z]+)-?(\d+)$/, '$1 $2')
     .replace(/([A-Z])/g, '$1 ')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
@@ -257,10 +330,16 @@ function fallbackWebSpeech(
     else utterance.lang = 'en-IN';
 
     const femaleVoice = getFemaleSpeechVoice(language);
-    if (femaleVoice) utterance.voice = femaleVoice;
+    if (femaleVoice) {
+      utterance.voice = femaleVoice;
+      if (femaleVoice.lang) {
+        utterance.lang = femaleVoice.lang;
+      }
+    }
 
-    utterance.rate = Math.max(0.6, Math.min(speed * 0.95, 1.8));
-    utterance.pitch = 1.05;
+    // Calm, clear clinic cadence (avoids rushed or robotic speech)
+    utterance.rate = Math.max(0.7, Math.min(speed * 0.90, 1.25));
+    utterance.pitch = 1.0; // Natural acoustic resonance
     utterance.volume = Math.max(0, Math.min(volume, 1.0));
 
     utterance.onend = () => onEnd?.();

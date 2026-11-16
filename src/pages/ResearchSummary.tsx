@@ -22,6 +22,7 @@ import {
 import { BookmarkIcon as BookmarkSolidIcon } from '@heroicons/react/24/solid'
 import { useData, ResearchArticle } from '../context/DataContext'
 import { apiTts } from '../utils/api'
+import { getFemaleSpeechVoice } from '../utils/speechAnnouncer'
 
 const fallbackArticle: ResearchArticle = {
   id: '1',
@@ -189,57 +190,9 @@ export default function ResearchSummary() {
 
   const currentContent = translations[selectedLanguage] || translations.en
 
-  // Helper function to pick a natural, soft, professional female voice
+  // Pick a natural, soft, professional female voice using unified speechAnnouncer
   const getFemaleVoice = (lang: 'en' | 'hi' | 'mr'): SpeechSynthesisVoice | null => {
-    if (!('speechSynthesis' in window)) return null
-    const voices = window.speechSynthesis.getVoices()
-    if (!voices || voices.length === 0) return null
-
-    const isFemale = (v: SpeechSynthesisVoice) => {
-      const lower = (v.name + ' ' + (v as any).voiceURI || '').toLowerCase()
-      // Reject explicit male identifiers
-      if (lower.includes('male') && !lower.includes('female')) return false
-      if (lower.includes('rishi') || lower.includes('david') || lower.includes('mark') || 
-          lower.includes('george') || lower.includes('james') || lower.includes('guy') || 
-          lower.includes('stefan') || lower.includes('daniel')) {
-        return false
-      }
-      // Prefer explicit female identifiers
-      if (lower.includes('female') || lower.includes('zira') || lower.includes('heera') || 
-          lower.includes('neerja') || lower.includes('veena') || lower.includes('swara') || 
-          lower.includes('kalpana') || lower.includes('jenny') || lower.includes('samantha') || 
-          lower.includes('victoria') || lower.includes('karen') || lower.includes('priya') || 
-          lower.includes('sonia') || lower.includes('shree')) {
-        return true
-      }
-      return true // Neutral fallback
-    }
-
-    if (lang === 'hi') {
-      const hiFemale = voices.find(v => (v.lang === 'hi-IN' || v.lang.startsWith('hi')) && isFemale(v))
-      if (hiFemale) return hiFemale
-      const anyHi = voices.find(v => v.lang === 'hi-IN' || v.lang.startsWith('hi'))
-      if (anyHi) return anyHi
-    }
-
-    if (lang === 'mr') {
-      const mrFemale = voices.find(v => (v.lang === 'mr-IN' || v.lang.startsWith('mr')) && isFemale(v))
-      if (mrFemale) return mrFemale
-      const anyMr = voices.find(v => v.lang === 'mr-IN' || v.lang.startsWith('mr'))
-      if (anyMr) return anyMr
-      // Fallback to Hindi female voice for Indian Devanagari pronunciation
-      const hiFemale = voices.find(v => (v.lang === 'hi-IN' || v.lang.startsWith('hi')) && isFemale(v))
-      if (hiFemale) return hiFemale
-    }
-
-    // English: Prioritize Indian English Female voice (e.g. Heera, Neerja, Veena), then natural English female
-    const inFemale = voices.find(v => (v.lang === 'en-IN' || v.name.toLowerCase().includes('india')) && isFemale(v))
-    if (inFemale) return inFemale
-
-    const enFemale = voices.find(v => v.lang.startsWith('en') && isFemale(v))
-    if (enFemale) return enFemale
-
-    return voices[0] || null
+    return getFemaleSpeechVoice(lang)
   }
 
   // Query TTS service health/status on mount
@@ -323,10 +276,14 @@ export default function ResearchSummary() {
       const femaleVoice = getFemaleVoice(selectedLanguage)
       if (femaleVoice) {
         utterance.voice = femaleVoice
+        if (femaleVoice.lang) {
+          utterance.lang = femaleVoice.lang
+        }
       }
 
-      utterance.rate = speechSpeed * 0.90
-      utterance.pitch = 1.05
+      // Smooth, natural reading cadence with natural vocal pitch
+      utterance.rate = Math.max(0.7, Math.min(speechSpeed * 0.90, 1.3))
+      utterance.pitch = 1.0
       utterance.volume = isMuted ? 0 : volume
 
       utterance.onstart = () => {
