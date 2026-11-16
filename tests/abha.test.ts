@@ -240,4 +240,54 @@ describe('ABDM & ABHA Integration Suite', () => {
       expect(enrolResult.profile?.abhaNumber).toBe('91-9999-8888-7777');
     });
   });
+
+  describe('ABDM Sandbox Developer Simulator Suite', () => {
+    it('identifies sandbox developer simulator mode and reports configured: true', () => {
+      const client = createAbdmClient({
+        env: { ABDM_CLIENT_ID: 'SBX_CLINICOPS_DEVELOPER', ABDM_CLIENT_SECRET: 'sbx_sec' },
+      });
+      expect(client.isConfigured()).toBe(true);
+      const desc = client.describe();
+      expect(desc.configured).toBe(true);
+      expect(desc.mode).toBe('sandbox-simulator');
+      expect(desc.missing).toHaveLength(0);
+    });
+
+    it('supports full ABHA verification with test OTP 123456 and matches requested ABHA ID', async () => {
+      const client = createAbdmClient({
+        env: { ABDM_CLIENT_ID: 'SBX_CLINICOPS_DEVELOPER', ABDM_CLIENT_SECRET: 'sbx_sec' },
+      });
+      const otpReq = await client.requestLoginOtp({ abhaNumber: '91-1234-5678-9012' });
+      expect(otpReq.txnId).toMatch(/^sbx-txn-/);
+      expect(otpReq.message).toContain('123456');
+
+      const verified = await client.verifyLoginOtp({ txnId: otpReq.txnId, otp: '123456' });
+      expect(verified.profile?.abhaNumber).toBe('91-1234-5678-9012');
+      expect(verified.profile?.name).toBe('Verified Patient');
+      expect(verified.profile?.abhaAddress).toBe('patient.sbx@sbx');
+    });
+
+    it('rejects wrong OTP with 400 error in sandbox simulator', async () => {
+      const client = createAbdmClient({
+        env: { ABDM_CLIENT_ID: 'SBX_CLINICOPS_DEVELOPER', ABDM_CLIENT_SECRET: 'sbx_sec' },
+      });
+      const otpReq = await client.requestLoginOtp({ abhaNumber: '91-1234-5678-9012' });
+      await expect(client.verifyLoginOtp({ txnId: otpReq.txnId, otp: '999999' })).rejects.toThrow(
+        /Invalid OTP/
+      );
+    });
+
+    it('supports enrollment with Aadhaar test OTP 123456 and generates a valid 14-digit ABHA', async () => {
+      const client = createAbdmClient({
+        env: { ABDM_CLIENT_ID: 'SBX_CLINICOPS_DEVELOPER', ABDM_CLIENT_SECRET: 'sbx_sec' },
+      });
+      const enrolReq = await client.requestEnrollmentOtp({ aadhaarNumber: '123456789012' });
+      expect(enrolReq.txnId).toMatch(/^sbx-enrol-/);
+
+      const enrolRes = await client.verifyEnrollment({ txnId: enrolReq.txnId, otp: '123456' });
+      expect(enrolRes.isNew).toBe(true);
+      expect(enrolRes.profile?.abhaNumber).toMatch(/^91-\d{4}-\d{4}-\d{4}$/);
+      expect(enrolRes.profile?.name).toBe('New Verified Patient');
+    });
+  });
 });

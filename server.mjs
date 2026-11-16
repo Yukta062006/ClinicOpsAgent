@@ -12,11 +12,18 @@ import { createAbdmClient, AbdmError } from './server-abdm.mjs';
 // Optional .env and .env.local support (Node 20.12+).
 try {
   process.loadEnvFile?.('.env.local');
-} catch {}
+} catch { }
 try {
   process.loadEnvFile?.();
 } catch {
   // No .env file present.
+}
+
+// Enable ABDM Sandbox Mode for development if no custom credentials are set
+if (!process.env.ABDM_CLIENT_ID && process.env.NODE_ENV !== 'production') {
+  process.env.ABDM_CLIENT_ID = 'SBX_CLINICOPS_DEVELOPER';
+  process.env.ABDM_CLIENT_SECRET = 'sbx_sec_developer_sandbox_2026';
+  process.env.ABDM_ENVIRONMENT = 'sandbox';
 }
 
 const app = express();
@@ -433,13 +440,13 @@ function initDatabase() {
   `);
 
   // Migrations for existing patients table
-  try { db.exec(`ALTER TABLE patients ADD COLUMN abha_id TEXT`); } catch (e) {}
-  try { db.exec(`ALTER TABLE patients ADD COLUMN aadhaar TEXT`); } catch (e) {}
-  try { db.exec(`ALTER TABLE patients ADD COLUMN pan TEXT`); } catch (e) {}
-  try { db.exec(`ALTER TABLE patients ADD COLUMN abha_verified INTEGER DEFAULT 0`); } catch (e) {}
-  try { db.exec(`ALTER TABLE patients ADD COLUMN abha_verified_at DATETIME`); } catch (e) {}
-  try { db.exec(`ALTER TABLE patients ADD COLUMN consent_recorded_at DATETIME`); } catch (e) {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0`); } catch (e) {}
+  try { db.exec(`ALTER TABLE patients ADD COLUMN abha_id TEXT`); } catch (e) { }
+  try { db.exec(`ALTER TABLE patients ADD COLUMN aadhaar TEXT`); } catch (e) { }
+  try { db.exec(`ALTER TABLE patients ADD COLUMN pan TEXT`); } catch (e) { }
+  try { db.exec(`ALTER TABLE patients ADD COLUMN abha_verified INTEGER DEFAULT 0`); } catch (e) { }
+  try { db.exec(`ALTER TABLE patients ADD COLUMN abha_verified_at DATETIME`); } catch (e) { }
+  try { db.exec(`ALTER TABLE patients ADD COLUMN consent_recorded_at DATETIME`); } catch (e) { }
+  try { db.exec(`ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0`); } catch (e) { }
 
   // One-time password recovery codes. Only the SHA-256 hash is stored, codes
   // are short lived and single use.
@@ -570,8 +577,8 @@ function initDatabase() {
   `);
 
   // Migration for call_count and queue_order columns on queue table if needed
-  try { db.exec(`ALTER TABLE queue ADD COLUMN call_count INTEGER DEFAULT 0`); } catch (_) {}
-  try { db.exec(`ALTER TABLE queue ADD COLUMN queue_order INTEGER DEFAULT 0`); } catch (_) {}
+  try { db.exec(`ALTER TABLE queue ADD COLUMN call_count INTEGER DEFAULT 0`); } catch (_) { }
+  try { db.exec(`ALTER TABLE queue ADD COLUMN queue_order INTEGER DEFAULT 0`); } catch (_) { }
 
   // Consultations table
   db.exec(`
@@ -694,9 +701,9 @@ function initDatabase() {
             INSERT INTO patients (id, user_id, abha_id, aadhaar, pan, date_of_birth, gender, blood_type, address, emergency_contact)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(patientId, u.id, '91-4821-7290-3412', encryptPii('XXXX-XXXX-4912'), encryptPii('AAAPT4912K'), '1998-07-14', 'Female', 'O+', '123 Marine Drive, Mumbai 400020', '+91 98201 99887');
-          
+
           db.prepare(`INSERT INTO user_points (id, user_id, total_points, streak_days) VALUES (?, ?, ?, ?)`).run(uuidv4(), u.id, 840, 5);
-        } catch(e) {}
+        } catch (e) { }
       }
     } else if (demoPassword) {
       // Keep demo accounts in sync with configured seed/demo password
@@ -1767,7 +1774,7 @@ app.get('/api/patients', authenticateToken, requireRole(['frontdesk', 'doctor'])
     const search = req.query.search || '';
     const limit = parseInt(req.query.limit) || 50;
     const offset = parseInt(req.query.offset) || 0;
-    
+
     let query = `
       SELECT u.id, u.name, u.email, u.phone, u.role, 
              p.date_of_birth, p.gender, p.address, p.emergency_contact,
@@ -1777,18 +1784,18 @@ app.get('/api/patients', authenticateToken, requireRole(['frontdesk', 'doctor'])
       LEFT JOIN patients p ON u.id = p.user_id
       WHERE u.role = 'patient'
     `;
-    
+
     const params = [];
-    
+
     if (search) {
       query += ` AND (u.name LIKE ? OR u.email LIKE ? OR u.phone LIKE ? OR p.abha_id LIKE ?)`;
       const searchParam = `%${search}%`;
       params.push(searchParam, searchParam, searchParam, searchParam);
     }
-    
+
     query += ` LIMIT ? OFFSET ?`;
     params.push(limit, offset);
-    
+
     const patients = db.prepare(query).all(...params).map((patient) => ({
       ...patient,
       abha_id: maskAbha(patient.abha_id),
@@ -1796,20 +1803,20 @@ app.get('/api/patients', authenticateToken, requireRole(['frontdesk', 'doctor'])
       aadhaar: maskAadhaar(patient.aadhaar),
       pan: maskPan(patient.pan),
     }));
-    
+
     // Get total count
     let countQuery = `SELECT COUNT(*) as total FROM users u LEFT JOIN patients p ON u.id = p.user_id WHERE u.role = 'patient'`;
     if (search) {
       countQuery += ` AND (u.name LIKE ? OR u.email LIKE ? OR u.phone LIKE ? OR p.abha_id LIKE ?)`;
     }
-    
+
     const countParams = search ? [`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`] : [];
     const countResult = db.prepare(countQuery).get(...countParams);
-    
-    res.json({ 
-      success: true, 
-      patients, 
-      total: countResult.total 
+
+    res.json({
+      success: true,
+      patients,
+      total: countResult.total
     });
   } catch (error) {
     handleError(res, error, 'patients/list');
@@ -1910,7 +1917,7 @@ app.get('/api/appointments', authenticateToken, (req, res) => {
   try {
     const { status, date, doctor_id, patient_id, type } = req.query;
     const user = req.user;
-    
+
     let query = `
       SELECT a.*, 
              p.name as patient_name, p.email as patient_email, p.phone as patient_phone,
@@ -1920,9 +1927,9 @@ app.get('/api/appointments', authenticateToken, (req, res) => {
       JOIN users d ON a.doctor_id = d.id
       WHERE 1=1
     `;
-    
+
     const params = [];
-    
+
     // Role-based filtering
     if (user.role === 'doctor') {
       query += ` AND a.doctor_id = ?`;
@@ -1931,34 +1938,34 @@ app.get('/api/appointments', authenticateToken, (req, res) => {
       query += ` AND a.patient_id = ?`;
       params.push(user.id);
     }
-    
+
     if (status) {
       query += ` AND a.status = ?`;
       params.push(status);
     }
-    
+
     if (date) {
       query += ` AND a.appointment_date = ?`;
       params.push(date);
     }
-    
+
     if (doctor_id) {
       query += ` AND a.doctor_id = ?`;
       params.push(doctor_id);
     }
-    
+
     if (patient_id) {
       query += ` AND a.patient_id = ?`;
       params.push(patient_id);
     }
-    
+
     if (type) {
       query += ` AND a.type = ?`;
       params.push(type);
     }
-    
+
     query += ` ORDER BY a.appointment_date, a.appointment_time`;
-    
+
     const appointments = db.prepare(query).all(...params);
     res.json({ success: true, appointments });
   } catch (error) {
@@ -2421,8 +2428,8 @@ app.post('/api/queue/call-next', authenticateToken, requireRole(['doctor', 'fron
 
     logAudit(req, 'queue.called_next', { entity: 'queue', entityId: nextPatient.id, detail: `token=${updatedPatient.token}` });
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       patient: updatedPatient,
       sound: true
     });
@@ -2446,10 +2453,10 @@ app.put('/api/queue/:id/status', authenticateToken, requireRole(['doctor', 'fron
       throw new ApiError(403, 'You can only update patients in your own queue');
     }
 
-    const timestampColumn = 
+    const timestampColumn =
       status === 'called' ? 'called_time' :
-      status === 'in-progress' ? 'started_time' :
-      status === 'completed' ? 'completed_time' : null;
+        status === 'in-progress' ? 'started_time' :
+          status === 'completed' ? 'completed_time' : null;
 
     const applyStatus = db.transaction(() => {
       let updateQuery = `UPDATE queue SET status = ?`;
@@ -2465,10 +2472,10 @@ app.put('/api/queue/:id/status', authenticateToken, requireRole(['doctor', 'fron
       db.prepare(updateQuery).run(...params);
 
       if (queueItem.appointment_id) {
-        const appointmentStatus = 
+        const appointmentStatus =
           status === 'in-progress' ? 'in-progress' :
-          status === 'completed' ? 'completed' :
-          status === 'cancelled' ? 'cancelled' : 'scheduled';
+            status === 'completed' ? 'completed' :
+              status === 'cancelled' ? 'cancelled' : 'scheduled';
 
         db.prepare(`UPDATE appointments SET status = ? WHERE id = ?`).run(appointmentStatus, queueItem.appointment_id);
       }
@@ -2666,9 +2673,9 @@ app.get('/api/dashboard/stats', authenticateToken, (req, res) => {
   try {
     const user = req.user;
     const date = new Date().toISOString().split('T')[0];
-    
+
     let stats = {};
-    
+
     if (user.role === 'doctor') {
       const doctorStats = db.prepare(`
         SELECT 
@@ -2678,7 +2685,7 @@ app.get('/api/dashboard/stats', authenticateToken, (req, res) => {
         FROM appointments 
         WHERE doctor_id = ? AND appointment_date = ?
       `).get(user.id, date);
-      
+
       const queueStats = db.prepare(`
         SELECT 
           COUNT(*) as active_queue,
@@ -2688,7 +2695,7 @@ app.get('/api/dashboard/stats', authenticateToken, (req, res) => {
         FROM queue 
         WHERE doctor_id = ? AND DATE(arrival_time) = ?
       `).get(user.id, date);
-      
+
       stats = {
         total_patients_today: doctorStats.total_patients_today || 0,
         appointments_today: doctorStats.scheduled_appointments || 0,
@@ -2707,13 +2714,13 @@ app.get('/api/dashboard/stats', authenticateToken, (req, res) => {
         FROM appointments 
         WHERE patient_id = ?
       `).get(user.id);
-      
+
       const currentQueue = db.prepare(`
         SELECT * FROM queue 
         WHERE patient_id = ? AND status IN ('waiting', 'called', 'in-progress')
         ORDER BY arrival_time DESC LIMIT 1
       `).get(user.id);
-      
+
       stats = {
         total_appointments: patientStats.total_appointments || 0,
         upcoming_appointments: patientStats.upcoming_appointments || 0,
@@ -2729,7 +2736,7 @@ app.get('/api/dashboard/stats', authenticateToken, (req, res) => {
           (SELECT COUNT(*) FROM queue WHERE DATE(arrival_time) = ? AND status = 'waiting') as active_queue,
           (SELECT COUNT(*) FROM appointments WHERE appointment_date = ? AND status = 'completed') as completed_consultations
       `).get(date, date, date);
-      
+
       stats = {
         total_patients: frontDeskStats.total_patients || 0,
         appointments_today: frontDeskStats.appointments_today || 0,
@@ -2737,7 +2744,7 @@ app.get('/api/dashboard/stats', authenticateToken, (req, res) => {
         completed_consultations: frontDeskStats.completed_consultations || 0
       };
     }
-    
+
     res.json({ success: true, stats });
   } catch (error) {
     handleError(res, error, 'dashboard/stats');
@@ -2876,10 +2883,10 @@ app.get('/api/learning/progress', authenticateToken, (req, res) => {
 
     const points = db.prepare('SELECT * FROM user_points WHERE user_id = ?').get(req.user.id);
 
-    res.json({ 
-      success: true, 
-      progress, 
-      points: points || { total_points: 0, streak_days: 0 } 
+    res.json({
+      success: true,
+      progress,
+      points: points || { total_points: 0, streak_days: 0 }
     });
   } catch (error) {
     handleError(res, error, 'learning/progress');

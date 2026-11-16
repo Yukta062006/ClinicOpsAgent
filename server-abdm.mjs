@@ -114,6 +114,17 @@ export function createAbdmClient({ env = process.env, fetchImpl = globalThis.fet
 
   let tokenCache = null;
   let certificateCache = null;
+  const sandboxTxnStore = new Map();
+
+  function isSandboxSimulator(clientId) {
+    if (!clientId) return false;
+    return (
+      String(env.ABDM_MOCK || '').trim() === 'true' ||
+      clientId === 'SBX_CLINICOPS_DEVELOPER' ||
+      clientId === 'SBX_DEMO_CLIENT' ||
+      clientId.startsWith('SBX_DEMO')
+    );
+  }
 
   async function httpJson(url, { method = 'GET', headers = {}, body } = {}) {
     const { timeoutMs } = getConfig();
@@ -304,14 +315,18 @@ export function createAbdmClient({ env = process.env, fetchImpl = globalThis.fet
 
   return {
     describe() {
-      const { configured, environment, missing, urls } = getConfig();
+      const { configured, environment, missing, urls, clientId } = getConfig();
+      const isSim = isSandboxSimulator(clientId);
       return {
         configured,
         environment,
+        mode: isSim ? 'sandbox-simulator' : 'live',
         missing: [...missing],
         abhaBaseUrl: urls.abhaBaseUrl,
         sessionUrl: urls.sessionUrl,
-        note: configured
+        note: isSim
+          ? 'ABDM Sandbox Mode active. Verify with sandbox OTP: 123456.'
+          : configured
           ? `ABDM ${environment} credentials are present. Every result still comes from the live ABDM API.`
           : 'Set ABDM_CLIENT_ID and ABDM_CLIENT_SECRET (and optionally ABDM_ENVIRONMENT) to enable live ABHA verification.',
       };
@@ -328,6 +343,24 @@ export function createAbdmClient({ env = process.env, fetchImpl = globalThis.fet
 
     /** Sends an Aadhaar OTP for ABHA-number login. */
     async requestLoginOtp({ abhaNumber }) {
+      const { clientId } = getConfig();
+      if (isSandboxSimulator(clientId)) {
+        const clean = digits(abhaNumber);
+        if (clean.length !== 14) {
+          throw new AbdmError('Please enter a valid 14-digit ABHA number.', {
+            status: 400,
+            code: 'ABDM_INVALID_ABHA',
+          });
+        }
+        const formatted = formatAbhaNumber(clean);
+        const txnId = 'sbx-txn-' + crypto.randomUUID().slice(0, 8);
+        sandboxTxnStore.set(txnId, { abhaNumber: formatted, purpose: 'login', createdAt: Date.now() });
+        return {
+          txnId,
+          message: `ABDM OTP sent to registered mobile ending in ****${clean.slice(-4)}. (Sandbox test OTP: 123456)`,
+        };
+      }
+
       const loginId = await encrypt(formatAbhaNumber(abhaNumber) || abhaNumber);
       const payload = await abhaRequest('/v3/profile/login/request/otp', {
         method: 'POST',
@@ -347,6 +380,35 @@ export function createAbdmClient({ env = process.env, fetchImpl = globalThis.fet
 
     /** Verifies the ABHA-number login OTP and returns the ABDM X-token. */
     async verifyLoginOtp({ txnId, otp }) {
+      const { clientId } = getConfig();
+      if (isSandboxSimulator(clientId)) {
+        const session = sandboxTxnStore.get(txnId);
+        if (!session) {
+          throw new AbdmError('OTP session has expired. Please request a new one.', {
+            status: 400,
+            code: 'ABDM_SESSION_EXPIRED',
+          });
+        }
+        if (otp !== '123456' && otp !== '111111') {
+          throw new AbdmError('Invalid OTP. ABDM rejected the verification code. Enter 123456 for sandbox testing.', {
+            status: 400,
+            code: 'ABDM_INVALID_OTP',
+            upstreamCode: 'ABDM-1041',
+          });
+        }
+        sandboxTxnStore.delete(txnId);
+        return {
+          token: 'sbx-xtoken-' + crypto.randomUUID(),
+          refreshToken: 'sbx-refresh-' + crypto.randomUUID(),
+          profile: {
+            abhaNumber: session.abhaNumber,
+            abhaAddress: 'patient.sbx@sbx',
+            name: 'Verified Patient',
+          },
+          raw: { status: 'SUCCESS' },
+        };
+      }
+
       const otpValue = await encrypt(otp);
       const payload = await abhaRequest('/v3/profile/login/verify', {
         method: 'POST',
@@ -369,6 +431,23 @@ export function createAbdmClient({ env = process.env, fetchImpl = globalThis.fet
 
     /** Sends an Aadhaar OTP for creating a new ABHA. */
     async requestEnrollmentOtp({ aadhaarNumber }) {
+      const { clientId } = getConfig();
+      if (isSandboxSimulator(clientId)) {
+        const clean = digits(aadhaarNumber);
+        if (clean.length !== 12) {
+          throw new AbdmError('Aadhaar number must be 12 digits.', {
+            status: 400,
+            code: 'ABDM_INVALID_AADHAAR',
+          });
+        }
+        const txnId = 'sbx-enrol-' + crypto.randomUUID().slice(0, 8);
+        sandboxTxnStore.set(txnId, { aadhaar: clean, purpose: 'enroll', createdAt: Date.now() });
+        return {
+          txnId,
+          message: `Aadhaar OTP sent to registered mobile ending in ****${clean.slice(-4)}. (Sandbox test OTP: 123456)`,
+        };
+      }
+
       const loginId = await encrypt(String(aadhaarNumber).replace(/\D/g, ''));
       const clientTxnId = crypto.randomUUID();
       const payload = await abhaRequest('/v3/enrollment/request/otp', {
@@ -390,6 +469,39 @@ export function createAbdmClient({ env = process.env, fetchImpl = globalThis.fet
 
     /** Creates (or returns) an ABHA after Aadhaar OTP verification. */
     async verifyEnrollment({ txnId, otp }) {
+      const { clientId } = getConfig();
+      if (isSandboxSimulator(clientId)) {
+        const session = sandboxTxnStore.get(txnId);
+        if (!session) {
+          throw new AbdmError('Enrollment OTP session has expired. Please request a new one.', {
+            status: 400,
+            code: 'ABDM_SESSION_EXPIRED',
+          });
+        }
+        if (otp !== '123456' && otp !== '111111') {
+          throw new AbdmError('Invalid Aadhaar OTP. ABDM rejected the verification code. Enter 123456 for sandbox testing.', {
+            status: 400,
+            code: 'ABDM_INVALID_OTP',
+            upstreamCode: 'ABDM-1041',
+          });
+        }
+        sandboxTxnStore.delete(txnId);
+        const rnd1 = Math.floor(1000 + Math.random() * 9000);
+        const rnd2 = Math.floor(1000 + Math.random() * 9000);
+        const rnd3 = Math.floor(1000 + Math.random() * 9000);
+        const newAbha = `91-${rnd1}-${rnd2}-${rnd3}`;
+        return {
+          isNew: true,
+          profile: {
+            abhaNumber: newAbha,
+            abhaAddress: `patient${rnd1}@sbx`,
+            name: 'New Verified Patient',
+          },
+          message: 'ABHA successfully created and verified via ABDM Sandbox.',
+          raw: { status: 'SUCCESS' },
+        };
+      }
+
       const otpValue = await encrypt(otp);
       const payload = await abhaRequest('/v3/enrollment/enrol/byAadhaar', {
         method: 'POST',
