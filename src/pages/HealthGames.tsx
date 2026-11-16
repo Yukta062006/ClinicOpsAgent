@@ -31,13 +31,24 @@ import {
   Lock,
   Zap,
   Footprints,
-  BookOpen
+  BookOpen,
+  Grid3X3,
+  Puzzle,
+  Boxes,
+  FileSearch,
+  Utensils
 } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import GameArtwork, { GameArtKey } from '../components/games/GameArtwork'
 import PointsCelebration, { CelebrationEvent } from '../components/games/PointsCelebration'
 import AnimatedNumber from '../components/games/AnimatedNumber'
 import { playGameSound, GameSoundName } from '../components/games/gameSounds'
+import TicTacToeGame from '../components/games/TicTacToeGame'
+import SlidingPuzzleGame from '../components/games/SlidingPuzzleGame'
+import MedicalMemoryMatchGame from '../components/games/MedicalMemoryMatchGame'
+import JigsawPuzzleGame from '../components/games/JigsawPuzzleGame'
+import WordSearchGame from '../components/games/WordSearchGame'
+import FoodSortingGame from '../components/games/FoodSortingGame'
 
 interface QuizQuestion {
   id: number
@@ -78,7 +89,7 @@ interface ArcadeGame {
   description: string
   pointsLabel: string
   art: GameArtKey
-  tab: 'quiz' | 'memory' | 'habits'
+  tab: 'quiz' | 'memory' | 'habits' | 'tictactoe' | 'sliding' | 'jigsaw' | 'wordsearch' | 'sorting'
   quizId?: string
   bestKey: string
   icon: any
@@ -328,6 +339,84 @@ const memoryCardPairs: Omit<MemoryCard, 'uid'>[] = [
 // ============================================================
 const ARCADE_GAMES: ArcadeGame[] = [
   {
+    id: 'tictactoe',
+    title: 'Tic-Tac-Toe (O & X)',
+    category: 'Logic & Turns',
+    difficulty: 'Easy',
+    duration: '3 min',
+    description: '3x3 interactive board against Doctor AI or 2-player pass-and-play with real move animations.',
+    pointsLabel: 'Up to 250 pts',
+    art: 'tictactoe',
+    tab: 'tictactoe',
+    bestKey: 'tictactoe',
+    icon: Grid3X3
+  },
+  {
+    id: 'sliding-puzzle',
+    title: 'Clinical Sliding Puzzle',
+    category: 'Spatial Reasoning',
+    difficulty: 'Medium',
+    duration: '5 min',
+    description: 'Move numbered clinical tiles to solve the health picture puzzle with live timer and move tracking.',
+    pointsLabel: 'Up to 350 pts',
+    art: 'sliding',
+    tab: 'sliding',
+    bestKey: 'sliding-puzzle',
+    icon: Boxes
+  },
+  {
+    id: 'memory-match',
+    title: 'Medical Memory Match',
+    category: 'Memory & Focus',
+    difficulty: 'Medium',
+    duration: '4 min',
+    description: 'Flip cards with medical illustrations, match clinical pairs and unlock physiological facts.',
+    pointsLabel: 'Up to 350 pts',
+    art: 'memory',
+    tab: 'memory',
+    bestKey: 'memory-match',
+    icon: Gamepad2
+  },
+  {
+    id: 'jigsaw-puzzle',
+    title: 'Clinical Jigsaw Puzzle',
+    category: 'Visual Reconstruction',
+    difficulty: 'Medium',
+    duration: '5 min',
+    description: 'Drag and drop colorful health puzzle pieces into frame slots with magnetic snap-to-place.',
+    pointsLabel: 'Up to 400 pts',
+    art: 'jigsaw',
+    tab: 'jigsaw',
+    bestKey: 'jigsaw-puzzle',
+    icon: Puzzle
+  },
+  {
+    id: 'word-search',
+    title: 'Health Word Search',
+    category: 'Lexical Search',
+    difficulty: 'Easy',
+    duration: '4 min',
+    description: 'Locate 7 vital medical and wellness keywords hidden in an interactive 10x10 letter grid.',
+    pointsLabel: 'Up to 300 pts',
+    art: 'wordsearch',
+    tab: 'wordsearch',
+    bestKey: 'word-search',
+    icon: FileSearch
+  },
+  {
+    id: 'food-sorting',
+    title: 'Healthy Food Sorting',
+    category: 'Nutritional Literacy',
+    difficulty: 'Easy',
+    duration: '4 min',
+    description: 'Sort clinical foods into Heart-Smart daily choices vs Occasional treats with educational feedback.',
+    pointsLabel: 'Up to 350 pts',
+    art: 'sorting',
+    tab: 'sorting',
+    bestKey: 'food-sorting',
+    icon: Utensils
+  },
+  {
     id: 'balanced-eating',
     title: 'Balanced Eating Challenge',
     category: 'Nutrition',
@@ -354,33 +443,6 @@ const ARCADE_GAMES: ArcadeGame[] = [
     quizId: 'medicine-match',
     bestKey: 'medicine-match',
     icon: Pill
-  },
-  {
-    id: 'anatomy-puzzle',
-    title: 'Anatomy Challenge',
-    category: 'Human Anatomy',
-    difficulty: 'Hard',
-    duration: '8 min',
-    description: 'Explore the heart, lungs, skeleton and skin through a focused anatomy quiz.',
-    pointsLabel: 'Up to 370 pts',
-    art: 'anatomy',
-    tab: 'quiz',
-    quizId: 'anatomy-puzzle',
-    bestKey: 'anatomy-puzzle',
-    icon: Brain
-  },
-  {
-    id: 'memory-match',
-    title: 'Medical Memory Match',
-    category: 'Memory & Focus',
-    difficulty: 'Easy',
-    duration: '4 min',
-    description: 'Flip cards and pair healthy habits with the physiology that powers them.',
-    pointsLabel: 'Up to 220 pts',
-    art: 'memory',
-    tab: 'memory',
-    bestKey: 'memory-match',
-    icon: Gamepad2
   },
   {
     id: 'habit-challenge',
@@ -439,7 +501,9 @@ export default function HealthGames() {
   // Navigation / celebration / sound
   // ---------------------------------------------------------
   const [activeView, setActiveView] = useState<'hub' | 'play'>('hub')
-  const [activeTab, setActiveTab] = useState<'quiz' | 'memory' | 'habits'>('quiz')
+  const [activeTab, setActiveTab] = useState<
+    'quiz' | 'memory' | 'habits' | 'tictactoe' | 'sliding' | 'jigsaw' | 'wordsearch' | 'sorting'
+  >('tictactoe')
   const [activeArcadeId, setActiveArcadeId] = useState<string>('balanced-eating')
 
   const [celebration, setCelebration] = useState<CelebrationEvent | null>(null)
@@ -804,6 +868,19 @@ export default function HealthGames() {
         retractPoints(25, `habits-complete:${todayKey()}`)
       }
       sfx('click')
+    }
+  }
+
+  const handleAwardPoints = (points: number, reason: string) => {
+    awardPoints(points, { reason })
+    enqueueCelebration({
+      type: 'points',
+      points,
+      title: reason,
+      subtitle: `+${points} Health Points earned`
+    })
+    if (activeArcade?.bestKey) {
+      recordGameResult(activeArcade.bestKey, points)
     }
   }
 
@@ -1250,6 +1327,78 @@ export default function HealthGames() {
           )}
 
           {/* --------------------------------------------------------- */}
+          {/* TIC-TAC-TOE GAME                                          */}
+          {/* --------------------------------------------------------- */}
+          {activeView === 'play' && activeTab === 'tictactoe' && (
+            <TicTacToeGame
+              onAwardPoints={handleAwardPoints}
+              soundEnabled={soundEnabled}
+              soundVolume={soundVolume}
+              onBackToArcade={backToArcade}
+            />
+          )}
+
+          {/* --------------------------------------------------------- */}
+          {/* SLIDING PUZZLE GAME                                       */}
+          {/* --------------------------------------------------------- */}
+          {activeView === 'play' && activeTab === 'sliding' && (
+            <SlidingPuzzleGame
+              onAwardPoints={handleAwardPoints}
+              soundEnabled={soundEnabled}
+              soundVolume={soundVolume}
+              onBackToArcade={backToArcade}
+            />
+          )}
+
+          {/* --------------------------------------------------------- */}
+          {/* MEDICAL MEMORY MATCH GAME                                 */}
+          {/* --------------------------------------------------------- */}
+          {activeView === 'play' && activeTab === 'memory' && (
+            <MedicalMemoryMatchGame
+              onAwardPoints={handleAwardPoints}
+              soundEnabled={soundEnabled}
+              soundVolume={soundVolume}
+              onBackToArcade={backToArcade}
+            />
+          )}
+
+          {/* --------------------------------------------------------- */}
+          {/* JIGSAW PUZZLE GAME                                        */}
+          {/* --------------------------------------------------------- */}
+          {activeView === 'play' && activeTab === 'jigsaw' && (
+            <JigsawPuzzleGame
+              onAwardPoints={handleAwardPoints}
+              soundEnabled={soundEnabled}
+              soundVolume={soundVolume}
+              onBackToArcade={backToArcade}
+            />
+          )}
+
+          {/* --------------------------------------------------------- */}
+          {/* WORD SEARCH PUZZLE GAME                                   */}
+          {/* --------------------------------------------------------- */}
+          {activeView === 'play' && activeTab === 'wordsearch' && (
+            <WordSearchGame
+              onAwardPoints={handleAwardPoints}
+              soundEnabled={soundEnabled}
+              soundVolume={soundVolume}
+              onBackToArcade={backToArcade}
+            />
+          )}
+
+          {/* --------------------------------------------------------- */}
+          {/* HEALTHY FOOD SORTING GAME                                 */}
+          {/* --------------------------------------------------------- */}
+          {activeView === 'play' && activeTab === 'sorting' && (
+            <FoodSortingGame
+              onAwardPoints={handleAwardPoints}
+              soundEnabled={soundEnabled}
+              soundVolume={soundVolume}
+              onBackToArcade={backToArcade}
+            />
+          )}
+
+          {/* --------------------------------------------------------- */}
           {/* QUIZ GAME                                                 */}
           {/* --------------------------------------------------------- */}
           {activeView === 'play' && activeTab === 'quiz' && (
@@ -1460,129 +1609,6 @@ export default function HealthGames() {
                       className="py-2.5 px-4 rounded-xl text-xs font-semibold text-[#5A6D62] hover:text-[#1B3E2F]"
                     >
                       Learning progress
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* --------------------------------------------------------- */}
-          {/* MEMORY GAME                                               */}
-          {/* --------------------------------------------------------- */}
-          {activeView === 'play' && activeTab === 'memory' && (
-            <div className="space-y-6">
-              <div className="bg-[#EFF5EE] border border-[#E2ECE4] rounded-3xl p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-[10px] font-bold text-emerald-800 bg-white px-2.5 py-0.5 rounded-full border border-[#E2ECE4]">
-                      Card match challenge
-                    </span>
-                    <span className="text-xs text-[#5A6D62]">
-                      Match habits with their physiological benefit
-                    </span>
-                  </div>
-                  <h3 className="text-xl sm:text-2xl font-serif font-bold text-[#1B3E2F] mt-1.5">
-                    Health Memory Match
-                  </h3>
-                </div>
-
-                <div className="flex items-center space-x-2 text-xs">
-                  <div className="bg-white px-3.5 py-2 rounded-xl border border-[#E2ECE4] text-[#1E2D25] font-semibold">
-                    Score: <strong className="text-emerald-700">{memoryScore}</strong>
-                  </div>
-                  <div className="bg-white px-3.5 py-2 rounded-xl border border-[#E2ECE4] text-[#1E2D25] font-semibold">
-                    Attempts: <strong>{attempts}</strong>
-                  </div>
-                  <div className="bg-white px-3.5 py-2 rounded-xl border border-[#E2ECE4] text-[#1E2D25] font-semibold flex items-center space-x-1.5">
-                    <Clock className="w-4 h-4 text-[#829489]" />
-                    <span>{Math.floor(memoryTimer / 60)}:{(memoryTimer % 60).toString().padStart(2, '0')}</span>
-                  </div>
-                  <button
-                    onClick={initMemoryGame}
-                    className="p-2 bg-white rounded-xl border border-[#E2ECE4] text-[#1B3E2F] hover:bg-[#FAF9F5]"
-                    title="Restart memory game"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                {memoryCards.map((card, idx) => {
-                  const isFlipped = flippedIndices.includes(idx) || matchedPairs.includes(card.pairId)
-                  const isMatched = matchedPairs.includes(card.pairId)
-
-                  return (
-                    <div
-                      key={card.uid}
-                      onClick={() => handleCardClick(idx)}
-                      className={`h-36 rounded-2xl cursor-pointer select-none transition-all duration-300 p-4 flex flex-col items-center justify-center text-center border ${
-                        isMatched
-                          ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-400/40 opacity-90'
-                          : isFlipped
-                          ? 'bg-white border-[#1B3E2F] shadow-md scale-[1.02]'
-                          : 'bg-gradient-to-br from-[#1B3E2F] to-[#2B5E48] border-[#1B3E2F] hover:shadow-md hover:scale-[1.01]'
-                      }`}
-                    >
-                      {isFlipped ? (
-                        <div className="space-y-2 animate-in zoom-in-90 duration-150">
-                          <div className="w-10 h-10 rounded-full bg-[#EFF5EE] flex items-center justify-center mx-auto">
-                            {renderCardIcon(card.iconName)}
-                          </div>
-                          <div>
-                            <p className="font-serif font-bold text-xs text-[#1E2D25] leading-tight">
-                              {card.label}
-                            </p>
-                            <p className="text-[10px] text-[#5A6D62] mt-0.5">
-                              {card.subLabel}
-                            </p>
-                          </div>
-                          {isMatched && (
-                            <span className="text-[9px] font-bold text-emerald-700 uppercase tracking-wider block">
-                              Matched +20
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-center text-white/80 space-y-1">
-                          <Activity className="w-6 h-6 mx-auto opacity-70" />
-                          <p className="text-[10px] font-semibold tracking-wider uppercase text-emerald-200">
-                            Flip card
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-
-              {memoryComplete && (
-                <div className="bg-emerald-50 border border-emerald-300 rounded-3xl p-6 text-center space-y-3 shadow-xs">
-                  <div className="w-12 h-12 rounded-full bg-emerald-600 text-white flex items-center justify-center mx-auto">
-                    <Check className="w-6 h-6" />
-                  </div>
-                  <h4 className="font-serif font-bold text-lg text-emerald-950">
-                    All pairs matched successfully!
-                  </h4>
-                  <p className="text-xs text-emerald-800 max-w-md mx-auto">
-                    Completed in <strong>{attempts} attempts</strong> and <strong>{memoryTimer} seconds</strong>.{' '}
-                    {memoryScore > 0
-                      ? <>You earned <strong>{memoryScore} points</strong> from genuine matches and the completion bonus.</>
-                      : <>Today&apos;s match points were already earned — replay practice does not duplicate them.</>}
-                  </p>
-                  <div className="flex items-center justify-center gap-2">
-                    <button
-                      onClick={initMemoryGame}
-                      className="py-2 px-5 bg-[#1B3E2F] hover:bg-[#143024] text-white rounded-xl text-xs font-bold"
-                    >
-                      Play again
-                    </button>
-                    <button
-                      onClick={backToArcade}
-                      className="py-2 px-5 bg-white border border-[#E2ECE4] text-[#1B3E2F] rounded-xl text-xs font-bold hover:bg-[#EFF5EE]"
-                    >
-                      All games
                     </button>
                   </div>
                 </div>

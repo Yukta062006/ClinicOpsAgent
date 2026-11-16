@@ -51,6 +51,13 @@ export default class ErrorBoundary extends Component<Props, State> {
               A temporary display issue occurred while rendering this healthcare section. Your patient records and session data remain secure.
             </p>
 
+            {this.state.error && (
+              <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-left overflow-auto max-h-60">
+                <p className="text-xs font-bold text-red-800 mb-1">{this.state.error.name}: {this.state.error.message}</p>
+                <pre className="text-[10px] text-red-700 whitespace-pre-wrap font-mono">{this.state.error.stack}</pre>
+              </div>
+            )}
+
             <div className="flex gap-3 justify-center">
               <button
                 onClick={this.handleReset}

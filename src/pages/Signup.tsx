@@ -1,76 +1,205 @@
-import React, { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { 
-  EnvelopeIcon, 
-  LockClosedIcon, 
-  UserIcon, 
+import React, { useEffect, useState } from 'react'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
+import {
+  EnvelopeIcon,
+  LockClosedIcon,
+  UserIcon,
   PhoneIcon,
-  ChevronDownIcon,
   IdentificationIcon,
-  ShieldCheckIcon,
   MapPinIcon,
   CalendarIcon,
   InformationCircleIcon,
-  SparklesIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  ShieldCheckIcon
 } from '@heroicons/react/24/outline'
-import { apiAuth } from '../utils/api'
 import { useData } from '../context/DataContext'
+import { apiAbha, AbhaStatus } from '../utils/api'
 
 export default function Signup() {
-  const [role, setRole] = useState<'Patient' | 'Front Desk' | 'Doctor'>('Patient')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
 
-  // Patient-specific ABDM / ABHA fields
-  const [dob, setDob] = useState('2000-07-14')
+  // Patient profile fields
+  const [dob, setDob] = useState('')
   const [gender, setGender] = useState('Female')
-  const [address, setAddress] = useState('123 Marine Drive, Mumbai 400020')
-  const [emergencyContact, setEmergencyContact] = useState('+91 98201 99887')
-  
-  // ABHA Workflow state: 'existing' | 'generate'
-  const [abhaMode, setAbhaMode] = useState<'existing' | 'generate'>('existing')
-  const [abhaNumber, setAbhaNumber] = useState('91-4821-7290-3412')
-  const [aadhaarNumber, setAadhaarNumber] = useState('XXXX-XXXX-4912')
-  const [panNumber, setPanNumber] = useState('AAAPT4912K')
-  const [abhaGeneratedNotice, setAbhaGeneratedNotice] = useState<string | null>(null)
+  const [address, setAddress] = useState('')
+  const [emergencyContact, setEmergencyContact] = useState('')
 
-  // Staff-specific fields
-  const [department, setDepartment] = useState('Reception')
-  const [specialty, setSpecialty] = useState('General Medicine')
+  // ABHA is optional. It is only marked verified after ABDM confirms an OTP
+  // and the server issues a short-lived verification proof.
+  const [abhaNumber, setAbhaNumber] = useState('')
+  const [abhaStatus, setAbhaStatus] = useState<AbhaStatus | null>(null)
+  const [abhaAction, setAbhaAction] = useState<'existing' | 'create' | null>(null)
+  const [abhaStep, setAbhaStep] = useState<'input' | 'otp' | 'verified'>('input')
+  const [abhaChallengeId, setAbhaChallengeId] = useState('')
+  const [abhaOtp, setAbhaOtp] = useState('')
+  const [maskedAbha, setMaskedAbha] = useState('')
+  const [aadhaarNumber, setAadhaarNumber] = useState('')
+  const [abhaConsent, setAbhaConsent] = useState(false)
+  const [abhaVerificationToken, setAbhaVerificationToken] = useState('')
+  const [verifiedAbhaName, setVerifiedAbhaName] = useState('')
+  const [abhaAddress, setAbhaAddress] = useState('')
+  const [abhaBusy, setAbhaBusy] = useState(false)
+  const [abhaError, setAbhaError] = useState('')
+  const [abhaInfo, setAbhaInfo] = useState('')
+  const [consent, setConsent] = useState(false)
 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
   const navigate = useNavigate()
-  const { addPatient, setUser } = useData()
+  const [searchParams] = useSearchParams()
+  const { signUp } = useData()
 
-  // Format ABHA as XX-XXXX-XXXX-XXXX
-  const handleAbhaChange = (val: string) => {
+  const formatAbha = (val: string) => {
     const raw = val.replace(/[^0-9]/g, '').slice(0, 14)
     let formatted = ''
     if (raw.length > 0) formatted += raw.slice(0, 2)
     if (raw.length > 2) formatted += '-' + raw.slice(2, 6)
     if (raw.length > 6) formatted += '-' + raw.slice(6, 10)
     if (raw.length > 10) formatted += '-' + raw.slice(10, 14)
-    setAbhaNumber(formatted || raw)
+    return formatted || raw
   }
 
-  // Option B: Load authorized ABDM sandbox test identifier
-  const handleGenerateDevAbha = () => {
-    const sandboxAbhaSamples = [
-      '14-8832-1094-5521',
-      '91-4821-7290-3412',
-      '22-4910-3382-7719',
-      '14-5512-9901-2283'
-    ]
-    const chosen = sandboxAbhaSamples[Math.floor(Math.random() * sandboxAbhaSamples.length)]
-    setAbhaNumber(chosen)
-    setAbhaGeneratedNotice('Loaded authorized ABDM Sandbox Test ABHA for testing (ABDM / NDHM Sandbox Mode).')
+  // Format ABHA as XX-XXXX-XXXX-XXXX
+  const handleAbhaChange = (val: string) => {
+    setAbhaNumber(formatAbha(val))
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    apiAbha.status().then((response) => {
+      if (!cancelled && response.success && response.data) setAbhaStatus(response.data)
+    })
+
+    const prefill = searchParams.get('abha')?.replace(/[^0-9]/g, '').slice(0, 14) || ''
+    if (prefill.length === 14) {
+      setAbhaNumber(formatAbha(prefill))
+      setAbhaAction('existing')
+    }
+
+    return () => {
+      cancelled = true
+    }
+    // The verification status and prefill are read once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const resetAbhaFlow = () => {
+    setAbhaAction(null)
+    setAbhaStep('input')
+    setAbhaChallengeId('')
+    setAbhaOtp('')
+    setMaskedAbha('')
+    setAadhaarNumber('')
+    setAbhaConsent(false)
+    setAbhaError('')
+    setAbhaInfo('')
+  }
+
+  const removeAbhaVerification = () => {
+    setAbhaVerificationToken('')
+    setVerifiedAbhaName('')
+    setAbhaAddress('')
+    setAbhaStep('input')
+    setAbhaAction(null)
+    setAbhaError('')
+    setAbhaInfo('')
+  }
+
+  const requestAbhaOtp = async () => {
+    setAbhaError('')
+    setAbhaInfo('')
+
+    if (abhaStatus && !abhaStatus.configured) {
+      setAbhaError(
+        `ABHA verification is not configured on this server. Missing: ${abhaStatus.missing.join(', ')}.`
+      )
+      return
+    }
+
+    if (abhaAction === 'existing' && abhaNumber.replace(/[^0-9]/g, '').length !== 14) {
+      setAbhaError('Enter a 14-digit ABHA number before requesting an OTP.')
+      return
+    }
+    if (abhaAction === 'create') {
+      if (aadhaarNumber.replace(/[^0-9]/g, '').length !== 12) {
+        setAbhaError('Enter your 12-digit Aadhaar number to create an ABHA.')
+        return
+      }
+      if (!abhaConsent) {
+        setAbhaError('Confirm that you consent to sharing your Aadhaar details with ABDM.')
+        return
+      }
+    }
+
+    setAbhaBusy(true)
+    try {
+      const response =
+        abhaAction === 'existing'
+          ? await apiAbha.requestVerifyOtp(abhaNumber.trim())
+          : await apiAbha.requestEnrollmentOtp(aadhaarNumber)
+
+      if (!response.success || !response.data) {
+        setAbhaError(response.error || 'ABDM could not send an OTP. Please try again.')
+        return
+      }
+
+      setAbhaChallengeId(response.data.challengeId)
+      setMaskedAbha(
+        abhaAction === 'existing'
+          ? response.data.maskedAbha || abhaNumber.trim()
+          : 'the mobile number linked with your Aadhaar'
+      )
+      setAbhaOtp('')
+      setAbhaStep('otp')
+      setAbhaInfo(response.data.message || 'OTP requested from ABDM.')
+      // Aadhaar is only needed to request the OTP and is not kept in the form.
+      if (abhaAction === 'create') setAadhaarNumber('')
+    } finally {
+      setAbhaBusy(false)
+    }
+  }
+
+  const verifyAbhaOtp = async () => {
+    setAbhaError('')
+    setAbhaInfo('')
+
+    if (!/^\d{6}$/.test(abhaOtp.trim())) {
+      setAbhaError('Enter the 6-digit OTP sent by ABDM.')
+      return
+    }
+
+    setAbhaBusy(true)
+    try {
+      const response =
+        abhaAction === 'existing'
+          ? await apiAbha.verifyExistingAbha(abhaChallengeId, abhaOtp.trim())
+          : await apiAbha.verifyEnrollmentOtp(abhaChallengeId, abhaOtp.trim())
+
+      if (!response.success || !response.data) {
+        setAbhaError(response.error || 'ABDM did not confirm this OTP. Please request a new one.')
+        return
+      }
+
+      setAbhaNumber(response.data.abhaNumber)
+      setAbhaVerificationToken(response.data.verificationToken)
+      setVerifiedAbhaName(response.data.name || '')
+      setAbhaAddress(response.data.abhaAddress || '')
+      setAbhaOtp('')
+      setAbhaStep('verified')
+      setAbhaInfo(
+        response.data.isNew === true
+          ? 'ABHA created and verified with ABDM.'
+          : 'ABHA verified with ABDM.'
+      )
+    } finally {
+      setAbhaBusy(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -86,106 +215,60 @@ export default function Signup() {
       setError('Please provide a valid email address.')
       return
     }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.')
+    if (password.length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+      setError('Password must be at least 8 characters and include a letter and a number.')
       return
     }
     if (password !== confirmPassword) {
       setError('Passwords do not match.')
       return
     }
-
-    const normalizedRole = role === 'Front Desk' ? 'frontdesk' : role === 'Doctor' ? 'doctor' : 'patient'
-
-    // Patient validations
-    if (normalizedRole === 'patient') {
+    if (!phone.trim()) {
+      setError('Please provide a mobile number so the clinic can reach you.')
+      return
+    }
+    if (abhaNumber.trim()) {
       const cleanAbha = abhaNumber.replace(/[^0-9]/g, '')
       if (cleanAbha.length !== 14) {
-        setError('ABHA ID must be a valid 14-digit Ayushman Bharat Health Account number (format: XX-XXXX-XXXX-XXXX).')
-        return
-      }
-      if (!phone.trim()) {
-        setError('Please provide a registered mobile number for health records.')
+        setError('An ABHA number must be 14 digits (format: XX-XXXX-XXXX-XXXX). Leave the field empty if you do not have one.')
         return
       }
     }
+    if (!consent) {
+      setError('Please confirm the health data consent declaration before registering.')
+      return
+    }
+    if (abhaAction !== null && abhaStep !== 'verified') {
+      setError('Finish or cancel the ABHA verification before creating your account.')
+      return
+    }
 
     setIsLoading(true)
-
     try {
-      const payload: any = {
+      const result = await signUp({
         name: name.trim(),
         email: email.trim().toLowerCase(),
         password,
+        role: 'patient',
+        consent: true,
         phone: phone.trim(),
-        role: normalizedRole
-      }
+        date_of_birth: dob || undefined,
+        gender,
+        address: address.trim() || undefined,
+        emergency_contact: emergencyContact.trim() || undefined,
+        abha_id: abhaNumber.trim() || undefined,
+        abha_verification_token: abhaVerificationToken || undefined
+      })
 
-      if (normalizedRole === 'patient') {
-        payload.date_of_birth = dob
-        payload.gender = gender
-        payload.address = address
-        payload.emergency_contact = emergencyContact
-        payload.abha_id = abhaNumber.trim()
-        payload.aadhaar = aadhaarNumber.trim()
-        payload.pan = panNumber.trim()
-        payload.blood_type = 'O+'
-      } else if (normalizedRole === 'doctor') {
-        payload.specialty = specialty
-        payload.department = department || 'Room 01'
-      } else {
-        payload.department = department || 'Reception'
-      }
-
-      const res = await apiAuth.register(payload)
-
-      if (!res.success || !res.data) {
-        setError(res.error || 'Registration failed. Please check details and try again.')
-        setIsLoading(false)
+      if (!result.success || !result.user) {
+        setError(result.error || 'Registration failed. Please check your details and try again.')
         return
       }
 
-      const returnedUser = res.data.user
-      const returnedToken = res.data.token
-
-      // Single real patient record connected immediately across workspace
-      if (normalizedRole === 'patient') {
-        addPatient({
-          id: returnedUser.id,
-          name: returnedUser.name,
-          age: dob ? Math.max(1, new Date().getFullYear() - new Date(dob).getFullYear()) : 26,
-          gender: gender || 'Other',
-          phone: phone.trim() || '+91 98201 45892',
-          email: returnedUser.email,
-          address: address || 'Mumbai, Maharashtra',
-          dateOfBirth: dob || '2000-07-14',
-          registrationDate: new Date().toISOString().split('T')[0],
-          status: 'active',
-          abhaId: abhaNumber.trim(),
-          aadhaar: aadhaarNumber.trim(),
-          pan: panNumber.trim(),
-          bloodGroup: 'O+',
-          emergencyContact: emergencyContact,
-          medicalHistory: ['Self-registered via ABHA digital portal'],
-          allergies: ['No known drug allergies reported'],
-          insurance: 'ABHA / PMJAY Health Record',
-          primaryPhysician: 'Dr. Sarah Sharma'
-        })
-      }
-
-      setUser(returnedUser)
-      localStorage.setItem('clinicops_token', returnedToken)
-      localStorage.setItem('clinicops_user', JSON.stringify(returnedUser))
-
-      setSuccess('Registration verified and profile linked successfully! Opening your dedicated workspace...')
-
-      setTimeout(() => {
-        if (normalizedRole === 'doctor') navigate('/doctor-dashboard')
-        else if (normalizedRole === 'frontdesk') navigate('/front-desk')
-        else navigate('/patient-dashboard')
-      }, 700)
+      setSuccess('Account created. Opening your patient workspace…')
+      navigate('/patient/dashboard', { replace: true })
     } catch (err: any) {
-      setError(err.message || 'Connection error. Please check server status.')
+      setError(err?.message || 'Could not reach the ClinicOps server. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -223,32 +306,11 @@ export default function Signup() {
         {/* Heading */}
         <div className="text-center mb-5">
           <h1 className="text-2xl md:text-3xl font-serif font-bold text-forest-green tracking-tight">
-            ClinicOps Registration
+            Create a Patient Account
           </h1>
           <p className="text-xs text-text-secondary mt-0.5">
-            Role-Based Clinical Operations & Ayushman Bharat Digital Health Integration
+            Self-registration is for patients. Clinic staff accounts are issued by an administrator.
           </p>
-        </div>
-
-        {/* Role Selector Tabs */}
-        <div className="mb-5 bg-[#EFF5EE] p-1.5 rounded-2xl flex items-center justify-between border border-[#E2ECE4]">
-          {(['Patient', 'Front Desk', 'Doctor'] as const).map((r) => (
-            <button
-              key={r}
-              type="button"
-              onClick={() => {
-                setRole(r)
-                setError('')
-              }}
-              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
-                role === r
-                  ? 'bg-white text-forest-green shadow-xs border border-pale-sage'
-                  : 'text-[#5A6D62] hover:text-forest-green'
-              }`}
-            >
-              {r} Workspace
-            </button>
-          ))}
         </div>
 
         {/* Feedback messages */}
@@ -278,7 +340,7 @@ export default function Signup() {
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder={role === 'Doctor' ? 'e.g. Dr. Rajesh Patil' : 'e.g. Yukta Ravindra Thakur'}
+                  placeholder="e.g. Yukta Ravindra Thakur"
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs text-stone-800 placeholder-stone-400 focus:outline-hidden focus:border-forest-green focus:bg-white"
                 />
               </div>
@@ -293,20 +355,21 @@ export default function Signup() {
                 <input
                   type="email"
                   required
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="e.g. yukta@clinicops.com"
+                  placeholder="you@example.com"
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs text-stone-800 placeholder-stone-400 focus:outline-hidden focus:border-forest-green focus:bg-white"
                 />
               </div>
             </div>
           </div>
 
-          {/* Row: Phone & Role Specific Field */}
+          {/* Row: Phone & Date of Birth */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-stone-800 mb-1">
-                Phone Number *
+                Mobile Number *
               </label>
               <div className="relative">
                 <PhoneIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
@@ -321,205 +384,308 @@ export default function Signup() {
               </div>
             </div>
 
-            {role === 'Patient' ? (
-              <div>
-                <label className="block text-xs font-semibold text-stone-800 mb-1">
-                  Date of Birth *
-                </label>
-                <div className="relative">
-                  <CalendarIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
-                  <input
-                    type="date"
-                    required
-                    value={dob}
-                    onChange={(e) => setDob(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs text-stone-800 focus:outline-hidden focus:border-forest-green focus:bg-white"
-                  />
-                </div>
-              </div>
-            ) : role === 'Doctor' ? (
-              <div>
-                <label className="block text-xs font-semibold text-stone-800 mb-1">
-                  Clinical Specialty *
-                </label>
+            <div>
+              <label className="block text-xs font-semibold text-stone-800 mb-1">
+                Date of Birth
+              </label>
+              <div className="relative">
+                <CalendarIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
                 <input
-                  type="text"
-                  required
-                  value={specialty}
-                  onChange={(e) => setSpecialty(e.target.value)}
-                  placeholder="Cardiology / General Medicine"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs text-stone-800 focus:outline-hidden focus:border-forest-green focus:bg-white"
+                  type="date"
+                  value={dob}
+                  onChange={(e) => setDob(e.target.value)}
+                  max={new Date().toISOString().split('T')[0]}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs text-stone-800 focus:outline-hidden focus:border-forest-green focus:bg-white"
                 />
               </div>
-            ) : (
-              <div>
-                <label className="block text-xs font-semibold text-stone-800 mb-1">
-                  Assigned Desk / Dept *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                  placeholder="OPD Main Reception"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs text-stone-800 focus:outline-hidden focus:border-forest-green focus:bg-white"
-                />
-              </div>
-            )}
+            </div>
           </div>
 
-          {/* ========================================================= */}
-          {/* PATIENT ONLY: ABHA & GOVERNMENT ID SECTION                */}
-          {/* ========================================================= */}
-          {role === 'Patient' && (
-            <div className="pt-2 border-t border-[#E2ECE4] space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-1.5">
-                  <IdentificationIcon className="w-4 h-4 text-forest-green" />
-                  <span className="text-xs font-bold text-forest-green uppercase tracking-wider">
-                    Ayushman Bharat Health Account (ABHA)
-                  </span>
-                </div>
-                <div className="flex items-center space-x-1 bg-[#EFF5EE] p-0.5 rounded-lg border border-[#E2ECE4]">
-                  <button
-                    type="button"
-                    onClick={() => setAbhaMode('existing')}
-                    className={`px-2 py-0.5 text-[11px] font-semibold rounded-md ${
-                      abhaMode === 'existing' ? 'bg-white text-forest-green shadow-2xs' : 'text-[#5A6D62]'
-                    }`}
-                  >
-                    Existing ABHA
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAbhaMode('generate')
-                      handleGenerateDevAbha()
-                    }}
-                    className={`px-2 py-0.5 text-[11px] font-semibold rounded-md ${
-                      abhaMode === 'generate' ? 'bg-white text-forest-green shadow-2xs' : 'text-[#5A6D62]'
-                    }`}
-                  >
-                    Register ABHA (Dev)
-                  </button>
-                </div>
+          {/* Gender, Address & Emergency Contact */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-stone-800 mb-1">
+                Gender
+              </label>
+              <select
+                value={gender}
+                onChange={(e) => setGender(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs text-stone-800 focus:outline-hidden focus:border-forest-green focus:bg-white"
+              >
+                <option value="Female">Female</option>
+                <option value="Male">Male</option>
+                <option value="Other">Other</option>
+                <option value="Prefer not to say">Prefer not to say</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-stone-800 mb-1">
+                Residential Address
+              </label>
+              <div className="relative">
+                <MapPinIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="City, State"
+                  className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs text-stone-800 placeholder-stone-400 focus:outline-hidden focus:border-forest-green focus:bg-white"
+                />
               </div>
+            </div>
 
-              {/* ABHA Input Field */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-semibold text-stone-800">
-                    ABHA ID / ABHA Number (14 Digits) *
-                  </label>
-                  <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.2 rounded-md">
-                    National Health Authority Validated
-                  </span>
-                </div>
-                <div className="relative">
-                  <ShieldCheckIcon className="w-4 h-4 text-emerald-700 absolute left-3.5 top-3" />
-                  <input
-                    type="text"
-                    required
-                    value={abhaNumber}
-                    onChange={(e) => handleAbhaChange(e.target.value)}
-                    placeholder="XX-XXXX-XXXX-XXXX"
-                    className="w-full pl-10 pr-24 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] font-mono text-xs text-stone-800 placeholder-stone-400 focus:outline-hidden focus:border-forest-green focus:bg-white"
-                  />
-                  {abhaMode === 'generate' && (
-                    <button
-                      type="button"
-                      onClick={handleGenerateDevAbha}
-                      className="absolute right-2 top-1.5 px-2.5 py-1 text-[10px] font-bold text-forest-green bg-[#EFF5EE] hover:bg-[#E2ECE4] rounded-lg transition-colors"
-                    >
-                      Regenerate
-                    </button>
-                  )}
-                </div>
-                {abhaGeneratedNotice && (
-                  <p className="text-[11px] text-[#5A6D62] mt-1 italic flex items-center gap-1">
-                    <InformationCircleIcon className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                    <span>{abhaGeneratedNotice}</span>
-                  </p>
-                )}
+            <div>
+              <label className="block text-xs font-semibold text-stone-800 mb-1">
+                Emergency Contact
+              </label>
+              <input
+                type="text"
+                value={emergencyContact}
+                onChange={(e) => setEmergencyContact(e.target.value)}
+                placeholder="Name / phone"
+                className="w-full px-3 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs text-stone-800 placeholder-stone-400 focus:outline-hidden focus:border-forest-green focus:bg-white"
+              />
+            </div>
+          </div>
+
+          {/* Optional ABHA */}
+          <div className="pt-2 border-t border-[#E2ECE4] space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <IdentificationIcon className="w-4 h-4 text-forest-green" />
+                <span className="text-xs font-bold text-forest-green uppercase tracking-wider">
+                  Ayushman Bharat Health Account (optional)
+                </span>
               </div>
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  abhaStep === 'verified'
+                    ? 'bg-emerald-50 text-emerald-800'
+                    : 'bg-stone-100 text-stone-600'
+                }`}
+              >
+                {abhaStep === 'verified' ? 'Verified with ABDM' : 'Not verified'}
+              </span>
+            </div>
 
-              {/* Aadhaar (Masked), PAN, and Gender */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-800 mb-1">
-                    Aadhaar Number
-                  </label>
-                  <input
-                    type="text"
-                    value={aadhaarNumber}
-                    onChange={(e) => setAadhaarNumber(e.target.value)}
-                    placeholder="XXXX-XXXX-4912"
-                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs font-mono text-stone-800 focus:outline-hidden focus:border-forest-green focus:bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-stone-800 mb-1">
-                    PAN Number
-                  </label>
-                  <input
-                    type="text"
-                    value={panNumber}
-                    onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
-                    placeholder="AAAPT4912K"
-                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs font-mono uppercase text-stone-800 focus:outline-hidden focus:border-forest-green focus:bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-stone-800 mb-1">
-                    Gender *
-                  </label>
-                  <select
-                    value={gender}
-                    onChange={(e) => setGender(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs text-stone-800 focus:outline-hidden focus:border-forest-green focus:bg-white"
-                  >
-                    <option value="Female">Female</option>
-                    <option value="Male">Male</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
+            {abhaStatus && !abhaStatus.configured && (
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-relaxed">
+                <p className="font-bold mb-0.5">ABHA verification is currently unavailable</p>
+                <p>
+                  This server is missing <span className="font-mono">{abhaStatus.missing.join(', ')}</span>.
+                  You can still register and enter your ABHA manually; it will be stored as unverified.
+                  Email and password registration continues to work normally.
+                </p>
               </div>
+            )}
 
-              {/* Address & Emergency Contact */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {abhaStep === 'verified' ? (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs space-y-1">
+                <p className="font-mono font-bold text-emerald-900">{abhaNumber}</p>
+                {verifiedAbhaName && <p className="text-emerald-800">{verifiedAbhaName}</p>}
+                {abhaAddress && <p className="font-mono text-[11px] text-emerald-700">{abhaAddress}</p>}
+                <p className="text-[11px] text-emerald-800 leading-relaxed">
+                  Ownership confirmed by ABDM. The clinic will store this number as verified.
+                </p>
+                <button
+                  type="button"
+                  onClick={removeAbhaVerification}
+                  className="text-[11px] font-semibold text-emerald-900 underline"
+                >
+                  Remove verification
+                </button>
+              </div>
+            ) : abhaAction === null ? (
+              <div className="space-y-2">
                 <div>
                   <label className="block text-xs font-semibold text-stone-800 mb-1">
-                    Residential Address
+                    ABHA Number
                   </label>
                   <div className="relative">
-                    <MapPinIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
+                    <IdentificationIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
                     <input
                       type="text"
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      placeholder="e.g. Marine Drive, Mumbai"
-                      className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs text-stone-800 focus:outline-hidden focus:border-forest-green focus:bg-white"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      value={abhaNumber}
+                      onChange={(e) => handleAbhaChange(e.target.value)}
+                      placeholder="XX-XXXX-XXXX-XXXX"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] font-mono text-xs text-stone-800 placeholder-stone-400 focus:outline-hidden focus:border-forest-green focus:bg-white"
                     />
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-stone-800 mb-1">
-                    Emergency Contact
-                  </label>
-                  <input
-                    type="text"
-                    value={emergencyContact}
-                    onChange={(e) => setEmergencyContact(e.target.value)}
-                    placeholder="+91 98201 99887 (Kin)"
-                    className="w-full px-3 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs text-stone-800 focus:outline-hidden focus:border-forest-green focus:bg-white"
-                  />
+                {abhaStatus?.configured && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAbhaAction('existing')
+                        setAbhaError('')
+                        setAbhaInfo('')
+                      }}
+                      className="px-3 py-2 rounded-xl border border-forest-green/30 bg-[#F4F8F4] text-[11px] font-bold text-forest-green hover:bg-[#EFF5EE] flex items-center justify-center gap-1.5"
+                    >
+                      <ShieldCheckIcon className="w-3.5 h-3.5" />
+                      Verify an existing ABHA
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAbhaNumber('')
+                        setAbhaAction('create')
+                        setAbhaError('')
+                        setAbhaInfo('')
+                      }}
+                      className="px-3 py-2 rounded-xl border border-forest-green/30 bg-[#F4F8F4] text-[11px] font-bold text-forest-green hover:bg-[#EFF5EE] flex items-center justify-center gap-1.5"
+                    >
+                      <IdentificationIcon className="w-3.5 h-3.5" />
+                      Create a new ABHA
+                    </button>
+                  </div>
+                )}
+
+                <p className="text-[11px] text-[#5A6D62] flex items-start gap-1">
+                  <InformationCircleIcon className="w-3.5 h-3.5 text-emerald-700 shrink-0 mt-0.5" />
+                  <span>
+                    Without ABDM verification the number is stored as unverified. Leave it blank if you
+                    do not have an ABHA number.
+                  </span>
+                </p>
+              </div>
+            ) : abhaStep === 'input' ? (
+              <div className="space-y-2">
+                {abhaAction === 'existing' ? (
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-800 mb-1">
+                      ABHA Number to verify
+                    </label>
+                    <div className="relative">
+                      <IdentificationIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        value={abhaNumber}
+                        onChange={(e) => handleAbhaChange(e.target.value)}
+                        placeholder="XX-XXXX-XXXX-XXXX"
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] font-mono text-xs text-stone-800 placeholder-stone-400 focus:outline-hidden focus:border-forest-green focus:bg-white"
+                      />
+                    </div>
+                    <p className="text-[10px] text-[#5A6D62] mt-1">
+                      ABDM sends an OTP to the mobile number linked with this ABHA&apos;s Aadhaar.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-xs font-semibold text-stone-800 mb-1">
+                        Aadhaar Number
+                      </label>
+                      <div className="relative">
+                        <IdentificationIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete="off"
+                          maxLength={12}
+                          value={aadhaarNumber}
+                          onChange={(e) => setAadhaarNumber(e.target.value.replace(/[^0-9]/g, '').slice(0, 12))}
+                          placeholder="12-digit Aadhaar number"
+                          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] font-mono text-xs text-stone-800 placeholder-stone-400 focus:outline-hidden focus:border-forest-green focus:bg-white"
+                        />
+                      </div>
+                      <p className="text-[10px] text-[#5A6D62] mt-1">
+                        Used only to request the Aadhaar OTP from ABDM. It is not stored by ClinicOps.
+                      </p>
+                    </div>
+                    <label className="flex items-start gap-2 p-2.5 rounded-xl bg-[#F7FAF7] border border-[#E2ECE4] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={abhaConsent}
+                        onChange={(e) => setAbhaConsent(e.target.checked)}
+                        className="mt-0.5 w-3.5 h-3.5 rounded text-forest-green border-gray-300"
+                      />
+                      <span className="text-[10px] text-stone-700 leading-relaxed">
+                        I consent to my Aadhaar details being shared with ABDM to create an ABHA number.
+                      </span>
+                    </label>
+                  </>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={requestAbhaOtp}
+                    disabled={abhaBusy}
+                    className="flex-1 py-2 rounded-xl bg-forest-green text-white text-[11px] font-bold disabled:opacity-50"
+                  >
+                    {abhaBusy ? 'Requesting OTP…' : 'Send ABDM OTP'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetAbhaFlow}
+                    className="px-3 py-2 rounded-xl border border-stone-200 text-[11px] font-semibold text-stone-600"
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="space-y-2">
+                <p className="text-[11px] text-stone-700">
+                  Enter the 6-digit OTP sent by ABDM to <strong>{maskedAbha}</strong>.
+                </p>
+                <div className="relative">
+                  <ShieldCheckIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    value={abhaOtp}
+                    onChange={(e) => setAbhaOtp(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                    placeholder="••••••"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] font-mono tracking-[0.4em] text-sm text-stone-800 focus:outline-hidden focus:border-forest-green focus:bg-white"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={verifyAbhaOtp}
+                    disabled={abhaBusy}
+                    className="flex-1 py-2 rounded-xl bg-forest-green text-white text-[11px] font-bold disabled:opacity-50"
+                  >
+                    {abhaBusy ? 'Verifying with ABDM…' : 'Verify with ABDM'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAbhaStep('input')
+                      setAbhaOtp('')
+                      setAbhaError('')
+                      setAbhaInfo('')
+                    }}
+                    className="px-3 py-2 rounded-xl border border-stone-200 text-[11px] font-semibold text-stone-600"
+                  >
+                    Back
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {abhaError && (
+              <p className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2">
+                {abhaError}
+              </p>
+            )}
+            {abhaInfo && !abhaError && (
+              <p className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg p-2">
+                {abhaInfo}
+              </p>
+            )}
+          </div>
 
           {/* Password & Confirm Password */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
@@ -532,10 +698,11 @@ export default function Signup() {
                 <input
                   type="password"
                   required
+                  autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Min 6 characters"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs text-stone-800 focus:outline-hidden focus:border-forest-green focus:bg-white"
+                  placeholder="Min 8 chars, letter + number"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs text-stone-800 placeholder-stone-400 focus:outline-hidden focus:border-forest-green focus:bg-white"
                 />
               </div>
             </div>
@@ -549,29 +716,47 @@ export default function Signup() {
                 <input
                   type="password"
                   required
+                  autoComplete="new-password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Re-enter password"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs text-stone-800 focus:outline-hidden focus:border-forest-green focus:bg-white"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs text-stone-800 placeholder-stone-400 focus:outline-hidden focus:border-forest-green focus:bg-white"
                 />
               </div>
             </div>
           </div>
 
+          {/* Consent */}
+          <label className="flex items-start gap-2 p-3 rounded-xl bg-[#F7FAF7] border border-[#E2ECE4] cursor-pointer">
+            <input
+              type="checkbox"
+              required
+              checked={consent}
+              onChange={(e) => setConsent(e.target.checked)}
+              className="mt-0.5 w-3.5 h-3.5 rounded text-forest-green border-gray-300 focus:ring-forest-green"
+            />
+            <span className="text-[11px] text-stone-700 leading-relaxed">
+              I consent to ClinicOps storing the health and contact details I provide in order to
+              manage my appointments and clinical records. I understand these details are visible
+              to the clinic's authorised staff, are stored encrypted, and that I can ask the clinic
+              to correct or delete them. *
+            </span>
+          </label>
+
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={isLoading}
-            className="w-full mt-4 py-3 rounded-xl bg-forest-green text-white font-semibold text-xs tracking-wide uppercase hover:bg-forest-green/90 transition-all shadow-xs disabled:opacity-50"
+            disabled={isLoading || abhaBusy}
+            className="w-full mt-2 py-3 rounded-xl bg-forest-green text-white font-semibold text-xs tracking-wide uppercase hover:bg-forest-green/90 transition-all shadow-xs disabled:opacity-50"
           >
-            {isLoading ? 'Verifying & Registering...' : `Complete ${role} Registration`}
+            {isLoading ? 'Creating your account…' : 'Create Patient Account'}
           </button>
         </form>
 
         <p className="text-center text-xs text-stone-600 mt-4">
           Already registered?{' '}
           <Link to="/login" className="font-bold text-forest-green hover:underline">
-            Sign In with Email or ABHA
+            Sign in
           </Link>
         </p>
       </div>

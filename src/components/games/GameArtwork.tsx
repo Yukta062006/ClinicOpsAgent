@@ -1,6 +1,16 @@
 import React from 'react'
 
-export type GameArtKey = 'nutrition' | 'medicine' | 'anatomy' | 'memory' | 'habits'
+export type GameArtKey = 
+  | 'nutrition' 
+  | 'medicine' 
+  | 'anatomy' 
+  | 'memory' 
+  | 'habits'
+  | 'tictactoe'
+  | 'sliding'
+  | 'jigsaw'
+  | 'wordsearch'
+  | 'sorting'
 
 interface GameArtworkProps {
   gameId: GameArtKey
@@ -473,6 +483,148 @@ function HabitsArt() {
   )
 }
 
+function TicTacToeArt() {
+  return (
+    <svg {...svgProps} className="w-full h-full" role="img" aria-label="Tic-Tac-Toe Game Illustration">
+      <defs>
+        <linearGradient id="ttt-bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#F5F9F6" />
+          <stop offset="100%" stopColor="#CDE4D3" />
+        </linearGradient>
+      </defs>
+      <rect width="400" height="240" fill="url(#ttt-bg)" />
+      {/* 3x3 Grid lines */}
+      <g stroke="#1B3E2F" strokeWidth="4" strokeLinecap="round" opacity="0.4">
+        <line x1="160" y1="40" x2="160" y2="200" />
+        <line x1="240" y1="40" x2="240" y2="200" />
+        <line x1="90" y1="90" x2="310" y2="90" />
+        <line x1="90" y1="150" x2="310" y2="150" />
+      </g>
+      {/* X Marks */}
+      <g stroke="#1B3E2F" strokeWidth="6" strokeLinecap="round">
+        <line x1="108" y1="52" x2="142" y2="78" />
+        <line x1="142" y1="52" x2="108" y2="78" />
+        <line x1="188" y1="110" x2="212" y2="132" />
+        <line x1="212" y1="110" x2="188" y2="132" />
+      </g>
+      {/* O Marks */}
+      <circle cx="200" cy="65" r="16" fill="none" stroke="#059669" strokeWidth="5" />
+      <circle cx="275" cy="120" r="16" fill="none" stroke="#059669" strokeWidth="5" />
+      <circle cx="125" cy="175" r="16" fill="none" stroke="#059669" strokeWidth="5" />
+      {/* Sparkles */}
+      <circle cx="70" cy="50" r="4" fill="#10B981" />
+      <circle cx="330" cy="190" r="5" fill="#047857" />
+    </svg>
+  )
+}
+
+function SlidingArt() {
+  return (
+    <svg {...svgProps} className="w-full h-full" role="img" aria-label="Sliding Puzzle Illustration">
+      <defs>
+        <linearGradient id="sld-bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#F4F8F4" />
+          <stop offset="100%" stopColor="#D2E8D8" />
+        </linearGradient>
+      </defs>
+      <rect width="400" height="240" fill="url(#sld-bg)" />
+      <g transform="translate(130, 40)">
+        <rect x="0" y="0" width="140" height="140" rx="16" fill="#1B3E2F" opacity="0.1" />
+        {/* Tile 1 */}
+        <rect x="6" y="6" width="38" height="38" rx="8" fill="#FFFFFF" stroke="#CBE2CE" strokeWidth="2" />
+        <text x="25" y="30" fontSize="16" fontWeight="bold" fill="#1B3E2F" textAnchor="middle">1</text>
+        {/* Tile 2 */}
+        <rect x="50" y="6" width="38" height="38" rx="8" fill="#FFFFFF" stroke="#CBE2CE" strokeWidth="2" />
+        <text x="69" y="30" fontSize="16" fontWeight="bold" fill="#1B3E2F" textAnchor="middle">2</text>
+        {/* Tile 3 */}
+        <rect x="94" y="6" width="38" height="38" rx="8" fill="#FFFFFF" stroke="#CBE2CE" strokeWidth="2" />
+        <text x="113" y="30" fontSize="16" fontWeight="bold" fill="#1B3E2F" textAnchor="middle">3</text>
+        {/* Tile 4 */}
+        <rect x="6" y="50" width="38" height="38" rx="8" fill="#FFFFFF" stroke="#CBE2CE" strokeWidth="2" />
+        <text x="25" y="74" fontSize="16" fontWeight="bold" fill="#1B3E2F" textAnchor="middle">4</text>
+        {/* Tile 5 (sliding motion) */}
+        <rect x="50" y="50" width="38" height="38" rx="8" fill="#1B3E2F" />
+        <text x="69" y="74" fontSize="16" fontWeight="bold" fill="#FFFFFF" textAnchor="middle">5</text>
+        {/* Empty slot */}
+        <rect x="94" y="94" width="38" height="38" rx="8" fill="none" stroke="#A7CBB0" strokeWidth="2" strokeDasharray="4 4" />
+      </g>
+    </svg>
+  )
+}
+
+function JigsawArt() {
+  return (
+    <svg {...svgProps} className="w-full h-full" role="img" aria-label="Jigsaw Puzzle Illustration">
+      <defs>
+        <linearGradient id="jig-bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#F3F8F5" />
+          <stop offset="100%" stopColor="#C9E3CE" />
+        </linearGradient>
+      </defs>
+      <rect width="400" height="240" fill="url(#jig-bg)" />
+      <g transform="translate(140, 50)">
+        {/* Puzzle piece 1 (Top Left) */}
+        <path d="M0,0 H50 C55,10 65,10 70,0 H120 V50 C110,55 110,65 120,70 V120 H70 C65,110 55,110 50,120 H0 V70 C10,65 10,55 0,50 Z" 
+              fill="#1B3E2F" opacity="0.9" stroke="#FFFFFF" strokeWidth="2" />
+        {/* Center Cross emblem */}
+        <rect x="50" y="35" width="20" height="50" rx="3" fill="#FFFFFF" opacity="0.9" />
+        <rect x="35" y="50" width="50" height="20" rx="3" fill="#FFFFFF" opacity="0.9" />
+      </g>
+    </svg>
+  )
+}
+
+function WordSearchArt() {
+  return (
+    <svg {...svgProps} className="w-full h-full" role="img" aria-label="Word Search Illustration">
+      <defs>
+        <linearGradient id="ws-bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#F5F9F6" />
+          <stop offset="100%" stopColor="#CBE4D3" />
+        </linearGradient>
+      </defs>
+      <rect width="400" height="240" fill="url(#ws-bg)" />
+      <g transform="translate(100, 45)" fontSize="16" fontWeight="bold" fontFamily="monospace" fill="#1B3E2F">
+        {/* Highlight band */}
+        <rect x="-8" y="2" width="200" height="24" rx="8" fill="#10B981" opacity="0.35" />
+        <text x="0" y="20">H  E  A  L  T  H  Y</text>
+        <text x="0" y="50">C  A  R  D  I  A  C</text>
+        <text x="0" y="80">V  I  T  A  M  I  N</text>
+        <text x="0" y="110">D  O  C  T  O  R  S</text>
+      </g>
+    </svg>
+  )
+}
+
+function SortingArt() {
+  return (
+    <svg {...svgProps} className="w-full h-full" role="img" aria-label="Healthy Food Sorting Illustration">
+      <defs>
+        <linearGradient id="sort-bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#F6FAF6" />
+          <stop offset="100%" stopColor="#CCE4D2" />
+        </linearGradient>
+      </defs>
+      <rect width="400" height="240" fill="url(#sort-bg)" />
+      {/* Left Basket: Healthy */}
+      <g transform="translate(110, 100)">
+        <ellipse cx="0" cy="40" rx="45" ry="18" fill="#A7CBAE" opacity="0.4" />
+        <path d="M-40,30 Q0,55 40,30 L32,65 Q0,85 -32,65 Z" fill="#1B3E2F" />
+        <circle cx="-15" cy="15" r="18" fill="#22C55E" />
+        <circle cx="15" cy="10" r="16" fill="#EF4444" />
+        <path d="M-15, -4 Q-10,-12 -6,-4" stroke="#166534" strokeWidth="3" fill="none" />
+      </g>
+      {/* Right Basket: Treats */}
+      <g transform="translate(290, 100)">
+        <ellipse cx="0" cy="40" rx="45" ry="18" fill="#FDE68A" opacity="0.4" />
+        <path d="M-40,30 Q0,55 40,30 L32,65 Q0,85 -32,65 Z" fill="#D97706" />
+        <circle cx="0" cy="15" r="16" fill="#F59E0B" />
+        <circle cx="0" cy="15" r="6" fill="#FFFBEB" />
+      </g>
+    </svg>
+  )
+}
+
 export default function GameArtwork({ gameId, className = '' }: GameArtworkProps) {
   return (
     <div className={className}>
@@ -481,6 +633,11 @@ export default function GameArtwork({ gameId, className = '' }: GameArtworkProps
       {gameId === 'anatomy' && <AnatomyArt />}
       {gameId === 'memory' && <MemoryArt />}
       {gameId === 'habits' && <HabitsArt />}
+      {gameId === 'tictactoe' && <TicTacToeArt />}
+      {gameId === 'sliding' && <SlidingArt />}
+      {gameId === 'jigsaw' && <JigsawArt />}
+      {gameId === 'wordsearch' && <WordSearchArt />}
+      {gameId === 'sorting' && <SortingArt />}
     </div>
   )
 }

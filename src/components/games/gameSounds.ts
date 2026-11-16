@@ -5,6 +5,10 @@ export type GameSoundName =
   | 'flip'
   | 'wrong'
   | 'click'
+  | 'win'
+  | 'match'
+  | 'snap'
+  | 'start'
 
 let audioContext: AudioContext | null = null
 
@@ -96,6 +100,29 @@ export function playGameSound(
     case 'wrong':
       playTone(ctx, 392, 0, 0.16, master * 0.45, 'sine')
       playTone(ctx, 311.13, 0.12, 0.24, master * 0.4, 'sine')
+      break
+
+    case 'win':
+      playTone(ctx, 523.25, 0, 0.25, master * 0.8, 'triangle')
+      playTone(ctx, 659.25, 0.08, 0.28, master * 0.8, 'triangle')
+      playTone(ctx, 783.99, 0.16, 0.3, master * 0.85, 'triangle')
+      playTone(ctx, 1046.5, 0.25, 0.55, master * 0.9, 'sine')
+      playTone(ctx, 1318.51, 0.35, 0.45, master * 0.4, 'sine')
+      break
+
+    case 'match':
+      playTone(ctx, 587.33, 0, 0.14, master * 0.6, 'triangle')
+      playTone(ctx, 880, 0.08, 0.22, master * 0.7, 'sine')
+      break
+
+    case 'snap':
+      playTone(ctx, 700, 0, 0.05, master * 0.5, 'sine')
+      playTone(ctx, 1200, 0.03, 0.08, master * 0.4, 'triangle')
+      break
+
+    case 'start':
+      playTone(ctx, 440, 0, 0.12, master * 0.5, 'triangle')
+      playTone(ctx, 659.25, 0.09, 0.2, master * 0.6, 'sine')
       break
 
     case 'click':

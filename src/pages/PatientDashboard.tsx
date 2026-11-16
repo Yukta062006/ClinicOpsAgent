@@ -724,7 +724,7 @@ export default function PatientDashboard() {
                 <div className="flex justify-between items-start">
                   <div>
                     <h4 className="font-bold text-[#1B3E2F] text-base">{currentPatient.name}</h4>
-                    <p className="text-xs text-[#5A6D62]">DOB: {currentPatient.dateOfBirth} • Age: {currentPatient.age} yrs • Blood Group: {currentPatient.bloodGroup || 'O+'}</p>
+                    <p className="text-xs text-[#5A6D62]">DOB: {currentPatient.dateOfBirth} • Age: {currentPatient.age} yrs • Blood Group: {currentPatient.bloodGroup || 'Not recorded'}</p>
                   </div>
                   <span className="text-xs font-mono font-bold bg-white text-[#1B3E2F] px-2.5 py-1 rounded-lg border border-[#E2ECE4]">
                     {currentPatient.gender}
@@ -733,19 +733,22 @@ export default function PatientDashboard() {
                 <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-[#E2ECE4] text-xs">
                   <div>
                     <span className="text-[#829489] block">ABHA Number</span>
-                    <span className="font-mono font-bold text-[#1E2D25]">{currentPatient.abhaId || '91-4821-7290-3412'}</span>
+                    <span className="font-mono font-bold text-[#1E2D25]">{currentPatient.abhaId || 'Not provided'}</span>
+                    <span className={`block text-[10px] mt-0.5 ${currentPatient.abhaVerified ? 'text-emerald-700' : 'text-[#829489]'}`}>
+                      {currentPatient.abhaVerified ? 'Verified with ABDM' : 'Not verified'}
+                    </span>
                   </div>
                   <div>
                     <span className="text-[#829489] block">Aadhaar (Masked)</span>
-                    <span className="font-mono font-bold text-[#1E2D25]">{currentPatient.aadhaar || 'XXXX-XXXX-4912'}</span>
+                    <span className="font-mono font-bold text-[#1E2D25]">{currentPatient.aadhaar || 'Not provided'}</span>
                   </div>
                   <div>
                     <span className="text-[#829489] block">PAN Number</span>
-                    <span className="font-mono font-bold text-[#1E2D25]">{currentPatient.pan || 'AAAPT4912K'}</span>
+                    <span className="font-mono font-bold text-[#1E2D25]">{currentPatient.pan || 'Not provided'}</span>
                   </div>
                   <div>
                     <span className="text-[#829489] block">Emergency Contact</span>
-                    <span className="font-medium text-[#1E2D25]">{currentPatient.emergencyContact || '+91 98201 99887'}</span>
+                    <span className="font-medium text-[#1E2D25]">{currentPatient.emergencyContact || 'Not provided'}</span>
                   </div>
                 </div>
               </div>
