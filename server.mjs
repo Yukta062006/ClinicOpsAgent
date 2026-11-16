@@ -3001,7 +3001,7 @@ app.get('/api/tts/status', async (req, res) => {
       },
       webSpeechFallback: {
         available: true,
-        voices: ['en-IN (Natural Female)', 'hi-IN (Natural Female)', 'mr-IN (Natural Female)'],
+        voices: ['en-IN (Natural Female)', 'hi-IN (Natural Female)', 'mr-IN (Natural Female)', 'bn-IN (Natural Female)'],
       },
       cacheStats: {
         entries: ttsAudioCache.size,
@@ -3020,7 +3020,7 @@ app.post('/api/tts/synthesize', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Text is required for speech synthesis' });
     }
 
-    const safeLang = ['en', 'hi', 'mr'].includes(language) ? language : 'en';
+    const safeLang = ['en', 'hi', 'mr', 'bn'].includes(language) ? language : 'en';
     const safeSpeed = Math.min(Math.max(Number(speed) || 1.0, 0.5), 2.0);
 
     const cacheKey = crypto
@@ -3094,6 +3094,7 @@ app.post('/api/tts/synthesize', async (req, res) => {
           en: 'en-IN',
           hi: 'hi-IN',
           mr: 'mr-IN',
+          bn: 'bn-IN',
         };
         const sarvamRes = await fetch('https://api.sarvam.ai/text-to-speech', {
           method: 'POST',

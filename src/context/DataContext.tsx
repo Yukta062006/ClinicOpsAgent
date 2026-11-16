@@ -34,6 +34,7 @@ export interface Patient {
   pan?: string;
   bloodGroup?: string;
   emergencyContact?: string;
+  preferredLanguage?: 'en' | 'hi' | 'mr' | 'bn';
 }
 
 export interface Appointment {
@@ -213,7 +214,7 @@ interface DataContextType {
   addToQueue: (item: QueueItem) => void;
   updateQueueItem: (id: string, status: QueueItem['status']) => void;
   requeuePatient: (queueId: string, note?: string) => void;
-  callAgainPatient: (queueId: string, language?: 'en' | 'hi' | 'mr') => QueueItem | undefined;
+  callAgainPatient: (queueId: string, language?: 'en' | 'hi' | 'mr' | 'bn') => QueueItem | undefined;
   returnToWaiting: (queueId: string, note?: string) => void;
   moveQueuePosition: (queueId: string, direction: 'up' | 'down') => void;
   reactivateAppointment: (appointmentId: string) => void;
@@ -221,8 +222,8 @@ interface DataContextType {
   getNextInQueue: () => QueueItem | undefined;
   getNextSequentialToken: (department?: string) => string;
   checkInPatient: (patientId: string, doctorName?: string, department?: string, reason?: string) => QueueItem;
-  callNextPatient: (doctorId?: string, language?: 'en' | 'hi' | 'mr') => QueueItem | undefined;
-  callPatientById: (queueId: string, language?: 'en' | 'hi' | 'mr') => QueueItem | undefined;
+  callNextPatient: (doctorId?: string, language?: 'en' | 'hi' | 'mr' | 'bn') => QueueItem | undefined;
+  callPatientById: (queueId: string, language?: 'en' | 'hi' | 'mr' | 'bn') => QueueItem | undefined;
   startConsultation: (queueId: string) => void;
   completeConsultation: (queueId: string, consultationData?: Partial<Consultation>) => void;
   activeToken: string;
@@ -1548,7 +1549,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return newItem;
   };
 
-  const callNextPatient = (doctorId?: string, language: 'en' | 'hi' | 'mr' = 'en'): QueueItem | undefined => {
+  const callNextPatient = (doctorId?: string, language: 'en' | 'hi' | 'mr' | 'bn' = 'en'): QueueItem | undefined => {
     // Find first eligible patient with Waiting status
     const waitingPatient = queue.find(q => q.status === 'waiting' && (!doctorId || q.doctorId === doctorId));
     if (!waitingPatient) return undefined;
@@ -1596,7 +1597,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return waitingPatient;
   };
 
-  const callPatientById = (queueId: string, language: 'en' | 'hi' | 'mr' = 'en'): QueueItem | undefined => {
+  const callPatientById = (queueId: string, language: 'en' | 'hi' | 'mr' | 'bn' = 'en'): QueueItem | undefined => {
     const patientItem = queue.find(q => q.id === queueId);
     if (!patientItem) return undefined;
 
@@ -1687,7 +1688,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   // Call Again (Repeats announcement for called patient without duplicate entry or token change)
-  const callAgainPatient = (queueId: string, language: 'en' | 'hi' | 'mr' = 'en'): QueueItem | undefined => {
+  const callAgainPatient = (queueId: string, language: 'en' | 'hi' | 'mr' | 'bn' = 'en'): QueueItem | undefined => {
     const item = queue.find(q => q.id === queueId);
     if (!item) return undefined;
 

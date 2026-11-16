@@ -20,12 +20,14 @@ export default function QueueManagement() {
     queue, 
     updateQueueItem, 
     callNextPatient, 
+    callPatientById,
     soundEnabled, 
     toggleSound
   } = useData()
 
   const [selectedRoomFilter, setSelectedRoomFilter] = useState<'all' | 'room02' | 'room03' | 'paused'>('all')
   const [announcementType, setAnnouncementType] = useState('Audio & screen')
+  const [announcementLang, setAnnouncementLang] = useState<'en' | 'hi' | 'mr' | 'bn'>('en')
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   const [showReassignModal, setShowReassignModal] = useState<any | null>(null)
   const [selectedQueueAction, setSelectedQueueAction] = useState<any | null>(null)
@@ -111,10 +113,11 @@ export default function QueueManagement() {
   })?.token || 'A-013'
 
   const handleCallToRoom02 = () => {
-    const called = callNextPatient()
+    const called = callNextPatient(undefined, announcementLang)
     if (called) {
       playHospitalChime()
-      notify(`Token ${called.token} (${called.patientName}) called to ${called.room || 'Room 02'}. Screen & chime updated.`)
+      const langLabel = announcementLang === 'hi' ? 'Hindi' : announcementLang === 'mr' ? 'Marathi' : announcementLang === 'bn' ? 'Bengali' : 'English'
+      notify(`Token ${called.token} called to ${called.room || 'Room 02'} (${langLabel}). Screen & announcement updated.`)
     } else {
       notify('No waiting patients remaining in queue.')
     }
@@ -434,6 +437,34 @@ export default function QueueManagement() {
               </div>
             </div>
 
+            {/* Announcement Language Selector */}
+            <div className="mb-2">
+              <label className="block text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1">
+                Announcement Language
+              </label>
+              <div className="grid grid-cols-4 gap-1 p-1 bg-pale-sage/30 rounded-lg">
+                {[
+                  { key: 'en', label: 'EN' },
+                  { key: 'hi', label: 'हिन्दी' },
+                  { key: 'mr', label: 'मराठी' },
+                  { key: 'bn', label: 'বাংলা' }
+                ].map(l => (
+                  <button
+                    key={l.key}
+                    type="button"
+                    onClick={() => setAnnouncementLang(l.key as any)}
+                    className={`py-1 text-xs font-bold rounded-md transition-all ${
+                      announcementLang === l.key
+                        ? 'bg-forest-green text-white shadow-xs'
+                        : 'text-stone-600 hover:text-forest-green bg-white/70'
+                    }`}
+                  >
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Call button */}
             <button
               onClick={handleCallToRoom02}
@@ -595,8 +626,9 @@ export default function QueueManagement() {
               <div className="space-y-2 text-xs">
                 <button
                   onClick={() => {
-                    updateQueueItem(selectedQueueAction.id, 'called')
-                    notify(`Token ${selectedQueueAction.token} called.`)
+                    callPatientById(selectedQueueAction.id, announcementLang)
+                    const langLabel = announcementLang === 'hi' ? 'Hindi' : announcementLang === 'mr' ? 'Marathi' : announcementLang === 'bn' ? 'Bengali' : 'English'
+                    notify(`Token ${selectedQueueAction.token} called with voice announcement (${langLabel}).`)
                     setSelectedQueueAction(null)
                   }}
                   className="w-full text-left p-2.5 rounded-lg hover:bg-pale-sage/20 text-forest-green font-medium"

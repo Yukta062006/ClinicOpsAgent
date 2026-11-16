@@ -14,10 +14,13 @@ import {
   CheckCircleIcon,
   ArrowTopRightOnSquareIcon,
   IdentificationIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  SpeakerWaveIcon,
+  LanguageIcon
 } from '@heroicons/react/24/outline'
 import { useData, Appointment } from '../context/DataContext'
 import { apiAbha, AbhaStatus } from '../utils/api'
+import { announcePatientCalling } from '../utils/speechAnnouncer'
 
 export default function PatientDashboard() {
   const navigate = useNavigate()
@@ -66,6 +69,34 @@ export default function PatientDashboard() {
     if (raw.length > 6) formatted += '-' + raw.slice(6, 10)
     if (raw.length > 10) formatted += '-' + raw.slice(10, 14)
     return formatted || raw
+  }
+
+  const [patientLang, setPatientLang] = useState<'en' | 'hi' | 'mr' | 'bn'>(() => {
+    return currentPatient?.preferredLanguage || 'en'
+  })
+  const [isAnnouncingToken, setIsAnnouncingToken] = useState(false)
+
+  const handleSelectLanguage = (lang: 'en' | 'hi' | 'mr' | 'bn') => {
+    setPatientLang(lang)
+    if (currentPatient) {
+      updatePatient({
+        ...currentPatient,
+        preferredLanguage: lang
+      })
+    }
+  }
+
+  const handleHearToken = () => {
+    setIsAnnouncingToken(true)
+    announcePatientCalling({
+      token: patientQueueItem?.token || 'A-014',
+      patientName: currentPatient?.name || 'Maya',
+      room: patientQueueItem?.room || 'Room 02',
+      language: patientLang,
+      onEnd: () => setIsAnnouncingToken(false)
+    }).finally(() => {
+      setTimeout(() => setIsAnnouncingToken(false), 3000)
+    })
   }
 
   const handleRequestLinkOtp = async () => {
@@ -286,15 +317,51 @@ export default function PatientDashboard() {
           </p>
         </div>
 
-        {/* Token Pill Box */}
-        <div className="bg-white rounded-2xl p-5 border border-[#D5E4D8] min-w-[190px] text-center shadow-2xs flex-shrink-0">
-          <p className="text-[10px] font-bold text-[#829489] uppercase tracking-wider">YOUR TOKEN</p>
-          <div className="text-4xl font-serif font-bold text-[#1B3E2F] my-1.5 tracking-tight">
-            {patientQueueItem?.token || 'A-014'}
+        {/* Token Pill Box & Preferred Language */}
+        <div className="flex flex-col items-center gap-2">
+          <div className="bg-white rounded-2xl p-5 border border-[#D5E4D8] min-w-[190px] text-center shadow-2xs flex-shrink-0 w-full sm:w-auto">
+            <p className="text-[10px] font-bold text-[#829489] uppercase tracking-wider">YOUR TOKEN</p>
+            <div className="text-4xl font-serif font-bold text-[#1B3E2F] my-1.5 tracking-tight">
+              {patientQueueItem?.token || 'A-014'}
+            </div>
+            <span className="inline-block text-[11px] font-bold text-[#2D5A43] bg-[#EFF5EE] px-3.5 py-1 rounded-full border border-[#D5E4D8] mb-2.5">
+              {patientQueueItem?.status === 'called' ? 'Serving Now' : "You're next"}
+            </span>
+
+            <button
+              type="button"
+              onClick={handleHearToken}
+              disabled={isAnnouncingToken}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-forest-green hover:bg-forest-green/90 text-white text-[11px] font-semibold transition-all shadow-2xs"
+            >
+              <SpeakerWaveIcon className={`w-3.5 h-3.5 ${isAnnouncingToken ? 'animate-pulse text-emerald-200' : ''}`} />
+              <span>{isAnnouncingToken ? 'Announcing...' : 'Hear Call'}</span>
+            </button>
           </div>
-          <span className="inline-block text-[11px] font-bold text-[#2D5A43] bg-[#EFF5EE] px-3.5 py-1 rounded-full border border-[#D5E4D8]">
-            {patientQueueItem?.status === 'called' ? 'Serving Now' : "You're next"}
-          </span>
+
+          {/* Preferred Language Selector */}
+          <div className="bg-white/90 border border-[#D5E4D8] rounded-xl p-1.5 flex items-center gap-1 shadow-2xs w-full justify-center">
+            <span className="text-[10px] font-bold text-text-secondary px-1 uppercase">Voice:</span>
+            {[
+              { key: 'en', label: 'EN' },
+              { key: 'hi', label: 'हिन्दी' },
+              { key: 'mr', label: 'मराठी' },
+              { key: 'bn', label: 'বাংলা' }
+            ].map(l => (
+              <button
+                key={l.key}
+                type="button"
+                onClick={() => handleSelectLanguage(l.key as any)}
+                className={`px-2 py-0.5 text-[11px] font-bold rounded-lg transition-all ${
+                  patientLang === l.key
+                    ? 'bg-forest-green text-white shadow-2xs'
+                    : 'text-stone-600 hover:text-forest-green'
+                }`}
+              >
+                {l.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -862,6 +929,33 @@ export default function PatientDashboard() {
                   <div>
                     <span className="text-[#829489] block">Emergency Contact</span>
                     <span className="font-medium text-[#1E2D25]">{currentPatient.emergencyContact || 'Not provided'}</span>
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-3 border-t border-[#E2ECE4]">
+                  <span className="text-[#829489] block text-xs font-semibold mb-1.5">
+                    Preferred Voice & Read-Aloud Language
+                  </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    {[
+                      { key: 'en', label: 'English' },
+                      { key: 'hi', label: 'हिन्दी' },
+                      { key: 'mr', label: 'मराठी' },
+                      { key: 'bn', label: 'বাংলা' }
+                    ].map(l => (
+                      <button
+                        key={l.key}
+                        type="button"
+                        onClick={() => handleSelectLanguage(l.key as any)}
+                        className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all text-center ${
+                          patientLang === l.key
+                            ? 'bg-forest-green text-white border-forest-green shadow-xs'
+                            : 'bg-white text-stone-700 border-[#E2ECE4] hover:border-forest-green'
+                        }`}
+                      >
+                        {l.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>

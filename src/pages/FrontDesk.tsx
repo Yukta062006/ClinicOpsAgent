@@ -55,7 +55,7 @@ export default function FrontDesk() {
   const [activeTab, setActiveTab] = useState<'all' | 'arrived' | 'upcoming'>('all')
   const [queueFilter, setQueueFilter] = useState<'all' | 'waiting' | 'called' | 'in-progress' | 'completed' | 'cancelled' | 'paused'>('all')
   const [searchQuery, setSearchQuery] = useState('')
-  const [callingLang, setCallingLang] = useState<'en' | 'hi' | 'mr'>('en')
+  const [callingLang, setCallingLang] = useState<'en' | 'hi' | 'mr' | 'bn'>('en')
   const [isAnnouncing, setIsAnnouncing] = useState(false)
   const [lastAnnounced, setLastAnnounced] = useState<string | null>(null)
   const [speechSpeed, setSpeechSpeed] = useState<number>(0.95)
@@ -215,7 +215,7 @@ export default function FrontDesk() {
     setLastAnnounced(`Token ${token} (${name})`)
     setActiveCalledItem({ token, name, room })
 
-    const langLabel = callingLang === 'hi' ? 'Hindi' : callingLang === 'mr' ? 'Marathi' : 'English'
+    const langLabel = callingLang === 'hi' ? 'Hindi' : callingLang === 'mr' ? 'Marathi' : callingLang === 'bn' ? 'Bengali' : 'English'
     notify(`Calling Token ${token} to ${room} with Project Vaani Female Voice (${langLabel}).`)
 
     setTimeout(() => {
@@ -247,7 +247,7 @@ export default function FrontDesk() {
 
     setLastAnnounced(`Token ${tokenToAnnounce} (${patientName})`)
     setActiveCalledItem({ token: tokenToAnnounce, name: patientName, room })
-    const langLabel = callingLang === 'hi' ? 'Hindi' : callingLang === 'mr' ? 'Marathi' : 'English'
+    const langLabel = callingLang === 'hi' ? 'Hindi' : callingLang === 'mr' ? 'Marathi' : callingLang === 'bn' ? 'Bengali' : 'English'
     notify(`Calling Token ${tokenToAnnounce} (${patientName}) with Project Vaani Female Voice (${langLabel}).`)
     setTimeout(() => setIsAnnouncing(false), 3500)
   }
@@ -273,7 +273,7 @@ export default function FrontDesk() {
     callAgainPatient(item.id, callingLang)
     setLastAnnounced(`Token ${item.token} (${item.patientName})`)
     setActiveCalledItem({ token: item.token, name: item.patientName, room: item.room || 'Room 02' })
-    const langLabel = callingLang === 'hi' ? 'Hindi' : callingLang === 'mr' ? 'Marathi' : 'English'
+    const langLabel = callingLang === 'hi' ? 'Hindi' : callingLang === 'mr' ? 'Marathi' : callingLang === 'bn' ? 'Bengali' : 'English'
     notify(`Repeating voice call for Token ${item.token} (${item.patientName}) to ${item.room || 'Room 02'} (${langLabel}).`)
     setTimeout(() => setIsAnnouncing(false), 3500)
   }
@@ -1237,6 +1237,15 @@ export default function FrontDesk() {
                       }`}
                     >
                       मराठी
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCallingLang('bn')}
+                      className={`px-2 py-0.5 rounded font-bold transition-all ${
+                        callingLang === 'bn' ? 'bg-forest-green text-white shadow-2xs' : 'text-stone-600 hover:text-forest-green'
+                      }`}
+                    >
+                      বাংলা
                     </button>
                   </div>
                 </div>

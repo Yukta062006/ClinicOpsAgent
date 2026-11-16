@@ -4,8 +4,10 @@ import {
   formatSpokenToken, 
   formatTokenForHindi, 
   formatTokenForMarathi,
+  formatTokenForBengali,
   formatRoomForHindi,
   formatRoomForMarathi,
+  formatRoomForBengali,
   announcePatientCalling
 } from '../src/utils/speechAnnouncer';
 
@@ -26,6 +28,11 @@ describe('Voice Quality and Selection Suite', () => {
     // Marathi voices
     { name: 'Microsoft Aarohi Online (Natural) - Marathi (India)', lang: 'mr-IN', voiceURI: 'Aarohi' },
     { name: 'Google मराठी', lang: 'mr-IN', voiceURI: 'Google Marathi' },
+    // Bengali voices
+    { name: 'Microsoft Bashkar Online (Natural) - Bengali (India)', lang: 'bn-IN', voiceURI: 'Bashkar' },
+    { name: 'Microsoft Tanishaa Online (Natural) - Bengali (India)', lang: 'bn-IN', voiceURI: 'Tanishaa' },
+    { name: 'Microsoft Nabaneeta Online (Natural) - Bengali (Bangladesh)', lang: 'bn-BD', voiceURI: 'Nabaneeta' },
+    { name: 'Google বাংলা', lang: 'bn-IN', voiceURI: 'Google Bengali' },
   ];
 
   beforeEach(() => {
@@ -141,6 +148,72 @@ describe('Voice Quality and Selection Suite', () => {
     });
 
     expect(res.text).toBe('टोकन क्रमांक शून्य शून्य दोन, कृपया खोली क्रमांक दोन मध्ये या.');
+  });
+
+  it('selects natural Bengali female voice (Tanishaa) over male voice (Bashkar)', () => {
+    const voice = getFemaleSpeechVoice('bn');
+    expect(voice).not.toBeNull();
+    expect(voice?.name).toBe('Microsoft Tanishaa Online (Natural) - Bengali (India)');
+    expect(voice?.lang).toBe('bn-IN');
+  });
+
+  it('selects Google বাংলা in Chrome environment when Tanishaa is not present', () => {
+    const withoutTanishaa = mockVoices.filter(v => !v.name.includes('Tanishaa') && !v.name.includes('Nabaneeta'));
+    (window.speechSynthesis.getVoices as any).mockReturnValue(withoutTanishaa);
+
+    const voice = getFemaleSpeechVoice('bn');
+    expect(voice).not.toBeNull();
+    expect(voice?.name).toBe('Google বাংলা');
+  });
+
+  it('strictly excludes male voices for Bengali (such as Bashkar)', () => {
+    const maleOnlyBengali = [
+      { name: 'Microsoft Bashkar Online (Natural) - Bengali (India)', lang: 'bn-IN' },
+      { name: 'Microsoft Pradeep - Bengali (India)', lang: 'bn-IN' },
+    ];
+    (window.speechSynthesis.getVoices as any).mockReturnValue(maleOnlyBengali);
+
+    const voice = getFemaleSpeechVoice('bn');
+    // None of the male voices should be selected via positive scores
+    expect(voice?.name).toBe('Microsoft Bashkar Online (Natural) - Bengali (India)'); // fallback only
+  });
+
+  it('gracefully falls back to high-quality Indic female voice when Bengali voice is absent', () => {
+    const withoutBengali = mockVoices.filter(v => !v.lang.startsWith('bn'));
+    (window.speechSynthesis.getVoices as any).mockReturnValue(withoutBengali);
+
+    const voice = getFemaleSpeechVoice('bn');
+    expect(voice).not.toBeNull();
+    // Swara (Natural Hindi) is chosen as Indic phonetic fallback
+    expect(voice?.name).toBe('Microsoft Swara Online (Natural) - Hindi (India)');
+  });
+
+  it('formats tokens into authentic Bengali words for natural Bengali speech synthesis', () => {
+    expect(formatTokenForBengali('001')).toBe('শূন্য শূন্য এক');
+    expect(formatTokenForBengali('042')).toBe('শূন্য চার দুই');
+    expect(formatTokenForBengali('A-012')).toBe('এ শূন্য এক দুই');
+    expect(formatTokenForBengali('GM-001')).toBe('জি এম শূন্য শূন্য এক');
+    expect(formatTokenForBengali('OPD-005')).toBe('ও পি ডি শূন্য শূন্য পাঁচ');
+  });
+
+  it('formats room cleanly into respectful Bengali phrases', () => {
+    expect(formatRoomForBengali('Room 02')).toBe('দুই নম্বর কক্ষে');
+    expect(formatRoomForBengali('Room 1')).toBe('এক নম্বর কক্ষে');
+    expect(formatRoomForBengali('Counter 3')).toBe('তিন নম্বর কাউন্টারে');
+    expect(formatRoomForBengali('Consultation Room 04')).toBe('চার নম্বর পরামর্শ কক্ষে');
+    expect(formatRoomForBengali('the consultation room')).toBe('পরামর্শ কক্ষে');
+    expect(formatRoomForBengali(undefined)).toBe('পরামর্শ কক্ষে');
+  });
+
+  it('generates polite, privacy-safe hospital announcement text in Bengali without announcing patient names', async () => {
+    const res = await announcePatientCalling({
+      token: '001',
+      patientName: 'Registered Patient',
+      room: 'Room 02',
+      language: 'bn',
+    });
+
+    expect(res.text).toBe('টোকেন নম্বর শূন্য শূন্য এক, দয়া করে দুই নম্বর কক্ষে আসুন।');
   });
 });
 

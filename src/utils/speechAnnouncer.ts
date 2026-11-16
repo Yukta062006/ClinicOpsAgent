@@ -5,7 +5,7 @@ export interface AnnouncePatientOptions {
   patientName: string;
   room?: string;
   doctorName?: string;
-  language?: 'en' | 'hi' | 'mr';
+  language?: 'en' | 'hi' | 'mr' | 'bn';
   speed?: number;
   volume?: number;
   isMuted?: boolean;
@@ -18,7 +18,7 @@ export interface AnnouncePatientOptions {
  * Prioritizes modern Natural/Neural voices (e.g., Microsoft Neerja/Swara/Aarohi/Jenny,
  * Google Indic/UK/US Female, Apple Veena/Lekha) and strictly avoids harsh, robotic, or male voices.
  */
-export function getFemaleSpeechVoice(lang: 'en' | 'hi' | 'mr'): SpeechSynthesisVoice | null {
+export function getFemaleSpeechVoice(lang: 'en' | 'hi' | 'mr' | 'bn'): SpeechSynthesisVoice | null {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
   const voices = window.speechSynthesis.getVoices();
   if (!voices || voices.length === 0) return null;
@@ -27,14 +27,15 @@ export function getFemaleSpeechVoice(lang: 'en' | 'hi' | 'mr'): SpeechSynthesisV
   const MALE_IDENTIFIERS = [
     'male', 'david', 'rishi', 'mark', 'george', 'james', 'guy', 'stefan',
     'daniel', 'richard', 'hemant', 'madhur', 'alex', 'fred', 'oliver',
-    'rory', 'arthur', 'tom', 'lee', 'pradeep', 'anil', 'ravi'
+    'rory', 'arthur', 'tom', 'lee', 'pradeep', 'anil', 'ravi',
+    'bashkar', 'subhash', 'anupam'
   ];
 
   // Preferred natural, soft, professional female voice keywords
   const PREFERRED_FEMALE_TOKENS = [
-    'neerja', 'swara', 'aarohi', 'priya', 'heera', 'kalpana', 'veena',
+    'neerja', 'swara', 'aarohi', 'tanishaa', 'nabaneeta', 'priya', 'heera', 'kalpana', 'veena',
     'lekha', 'isha', 'sangeeta', 'jenny', 'aria', 'sonia', 'libby',
-    'samantha', 'serena', 'victoria', 'karen', 'shree', 'female'
+    'samantha', 'serena', 'victoria', 'karen', 'shree', 'female', 'bengali', 'বাংলা'
   ];
 
   const isExcludedMale = (name: string): boolean => {
@@ -55,7 +56,7 @@ export function getFemaleSpeechVoice(lang: 'en' | 'hi' | 'mr'): SpeechSynthesisV
   };
 
   // Score candidate voices to select the softest, clearest, most professional female voice
-  const scoreVoice = (v: SpeechSynthesisVoice, targetLang: 'en' | 'hi' | 'mr'): number => {
+  const scoreVoice = (v: SpeechSynthesisVoice, targetLang: 'en' | 'hi' | 'mr' | 'bn'): number => {
     const name = (v.name + ' ' + (v as any).voiceURI || '').toLowerCase();
     const voiceLang = (v.lang || '').toLowerCase().replace(/_/g, '-');
 
@@ -110,6 +111,47 @@ export function getFemaleSpeechVoice(lang: 'en' | 'hi' | 'mr'): SpeechSynthesisV
       } else {
         return -1000;
       }
+    } else if (targetLang === 'bn') {
+      const isBn = voiceLang === 'bn-in' || voiceLang === 'bn-bd' || voiceLang.startsWith('bn') ||
+                   name.includes('বাংলা') || name.includes('bengali') || name.includes('bangla');
+      if (isBn) {
+        score += 100;
+
+        // 1. Ultra-high quality Azure Neural voice: Microsoft Tanishaa Online (Natural) - Bengali (India)
+        if (name.includes('tanishaa') && isNaturalOrNeural(name)) {
+          score += 95;
+        } else if (name.includes('tanishaa')) {
+          score += 75;
+        }
+
+        // 2. High-quality Azure Neural voice: Microsoft Nabaneeta Online (Natural) - Bengali (Bangladesh)
+        if (name.includes('nabaneeta') && isNaturalOrNeural(name)) {
+          score += 90;
+        } else if (name.includes('nabaneeta')) {
+          score += 70;
+        }
+
+        // 3. High-quality Google Neural voice in Chrome/Android: Google বাংলা / Google Bengali / bn-in-x-bni-*
+        if (name.includes('google') || name.includes('x-bni')) {
+          score += 85;
+        }
+
+        // 4. Apple/Other Natural/Online Bengali voice
+        if (isNaturalOrNeural(name)) {
+          score += 40;
+        }
+      } else if (voiceLang === 'hi-in' || voiceLang.startsWith('hi') || name.includes('हिन्दी') || name.includes('hindi')) {
+        // High-quality Indic fallback: Devanagari Hindi female voice preserves Indic phonetics when Bengali voice is not installed
+        score += 55;
+        if (name.includes('swara') && isNaturalOrNeural(name)) score += 35;
+        if (name.includes('google')) score += 30;
+      } else if (voiceLang === 'en-in' || name.includes('india')) {
+        // Indian English female voice fallback
+        score += 40;
+        if (name.includes('neerja') || name.includes('heera')) score += 20;
+      } else {
+        return -1000;
+      }
     } else {
       // English: Prioritize Indian English (en-IN), then natural international English
       if (voiceLang === 'en-in') score += 100;
@@ -143,9 +185,9 @@ export function getFemaleSpeechVoice(lang: 'en' | 'hi' | 'mr'): SpeechSynthesisV
   }
 
   // Graceful multi-tiered fallback without breaking announcements
-  const langPrefix = lang === 'en' ? 'en' : (lang === 'hi' ? 'hi' : 'mr');
+  const langPrefix = lang === 'en' ? 'en' : (lang === 'hi' ? 'hi' : (lang === 'mr' ? 'mr' : 'bn'));
   const fallback = voices.find(v => v.lang.toLowerCase().startsWith(langPrefix) && !isExcludedMale(v.name)) ||
-                   (lang === 'mr' ? voices.find(v => v.lang.toLowerCase().startsWith('hi') && !isExcludedMale(v.name)) : null) ||
+                   ((lang === 'mr' || lang === 'bn') ? voices.find(v => v.lang.toLowerCase().startsWith('hi') && !isExcludedMale(v.name)) : null) ||
                    voices.find(v => v.lang.toLowerCase().startsWith('en') && !isExcludedMale(v.name)) ||
                    voices[0] || null;
 
@@ -395,6 +437,111 @@ export function formatRoomForMarathi(room?: string): string {
 }
 
 /**
+ * Bengali digit words for natural, authentic Bengali pronunciation.
+ */
+export const BENGALI_DIGIT_WORDS: Record<string, string> = {
+  '0': 'শূন্য',
+  '1': 'এক',
+  '2': 'দুই',
+  '3': 'তিন',
+  '4': 'চার',
+  '5': 'পাঁচ',
+  '6': 'ছয়',
+  '7': 'সাত',
+  '8': 'আট',
+  '9': 'নয়',
+};
+
+/**
+ * Bengali phonetic representations of English alphabet letters for clinic tokens.
+ */
+export const BENGALI_LETTER_WORDS: Record<string, string> = {
+  a: 'এ',
+  b: 'বি',
+  c: 'সি',
+  d: 'ডি',
+  e: 'ই',
+  f: 'এফ',
+  g: 'জি',
+  h: 'এইচ',
+  i: 'আই',
+  j: 'জে',
+  k: 'কে',
+  l: 'এল',
+  m: 'এম',
+  n: 'এন',
+  o: 'ও',
+  p: 'পি',
+  q: 'কিউ',
+  r: 'আর',
+  s: 'এস',
+  t: 'টি',
+  u: 'ইউ',
+  v: 'ভি',
+  w: 'ডাব্লিউ',
+  x: 'এক্স',
+  y: 'ওয়াই',
+  z: 'জেড',
+};
+
+/**
+ * Formats token string for authentic, natural Bengali spoken pronunciation.
+ * E.g., '001' -> 'শূন্য শূন্য এক', '042' -> 'শূন্য চার দুই', 'GM-001' -> 'জি এম শূন্য শূন্য এক'
+ */
+export function formatTokenForBengali(rawToken: string): string {
+  if (!rawToken) return 'শূন্য শূন্য এক';
+  const cleaned = rawToken.trim().replace(/[-_/]/g, ' ');
+  const words: string[] = [];
+
+  for (const char of cleaned) {
+    if (char === ' ') continue;
+    const digit = BENGALI_DIGIT_WORDS[char];
+    if (digit) {
+      words.push(digit);
+      continue;
+    }
+    const letter = BENGALI_LETTER_WORDS[char.toLowerCase()];
+    if (letter) {
+      words.push(letter);
+      continue;
+    }
+    words.push(char);
+  }
+
+  return words.join(' ');
+}
+
+/**
+ * Formats room for polite, authentic Bengali announcement.
+ * E.g., 'Room 02' -> 'দুই নম্বর কক্ষে', 'Counter 3' -> 'তিন নম্বর কাউন্টারে', 'Consultation Room' -> 'পরামর্শ কক্ষে'
+ */
+export function formatRoomForBengali(room?: string): string {
+  if (!room || room === 'the consultation room') {
+    return 'পরামর্শ কক্ষে';
+  }
+  const trimmed = room.trim();
+  const roomMatch = trimmed.match(/^(?:room|রুম|কক্ষ)\s*(?:no\.?|number|নম্বর)?\s*0?(\d+)$/i);
+  if (roomMatch) {
+    const num = roomMatch[1];
+    const bnNum = BENGALI_DIGIT_WORDS[num] || num;
+    return `${bnNum} নম্বর কক্ষে`;
+  }
+  const counterMatch = trimmed.match(/^(?:counter|কাউন্টার)\s*(?:no\.?|number|নম্বর)?\s*0?(\d+)$/i);
+  if (counterMatch) {
+    const num = counterMatch[1];
+    const bnNum = BENGALI_DIGIT_WORDS[num] || num;
+    return `${bnNum} নম্বর কাউন্টারে`;
+  }
+  const consultMatch = trimmed.match(/^consultation\s*room\s*0?(\d+)$/i);
+  if (consultMatch) {
+    const num = consultMatch[1];
+    const bnNum = BENGALI_DIGIT_WORDS[num] || num;
+    return `${bnNum} নম্বর পরামর্শ কক্ষে`;
+  }
+  return 'পরামর্শ কক্ষে';
+}
+
+/**
  * Formats token string for natural spoken clarity.
  * E.g., 'GM-001' -> 'G M 001', '001' -> '001', 'A-002' -> 'A 002'
  */
@@ -455,6 +602,13 @@ export async function announcePatientCalling(options: AnnouncePatientOptions): P
     announcementText = `टोकन क्रमांक ${marathiToken}, कृपया ${marathiRoom} या.`;
     if (patientName && patientName !== 'Registered Patient') {
       announcementText = `टोकन क्रमांक ${marathiToken}, ${patientName}, कृपया ${marathiRoom} या.`;
+    }
+  } else if (language === 'bn') {
+    const bengaliToken = formatTokenForBengali(token);
+    const bengaliRoom = formatRoomForBengali(room);
+    announcementText = `টোকেন নম্বর ${bengaliToken}, দয়া করে ${bengaliRoom} আসুন।`;
+    if (patientName && patientName !== 'Registered Patient') {
+      announcementText = `টোকেন নম্বর ${bengaliToken}, ${patientName}, দয়া করে ${bengaliRoom} আসুন।`;
     }
   } else {
     // English template
@@ -523,7 +677,7 @@ export async function replayLastAnnouncement(): Promise<{ engine: string; text: 
 
 function fallbackWebSpeech(
   text: string, 
-  language: 'en' | 'hi' | 'mr', 
+  language: 'en' | 'hi' | 'mr' | 'bn', 
   speed: number = 0.95,
   volume: number = 0.95,
   onEnd?: () => void
@@ -536,6 +690,7 @@ function fallbackWebSpeech(
     const utterance = new SpeechSynthesisUtterance(text);
     if (language === 'hi') utterance.lang = 'hi-IN';
     else if (language === 'mr') utterance.lang = 'mr-IN';
+    else if (language === 'bn') utterance.lang = 'bn-IN';
     else utterance.lang = 'en-IN';
 
     const femaleVoice = getFemaleSpeechVoice(language);
@@ -553,6 +708,9 @@ function fallbackWebSpeech(
       utterance.pitch = 1.0;
     } else if (language === 'mr') {
       utterance.rate = Math.max(0.85, Math.min(speed * 0.96, 1.15));
+      utterance.pitch = 1.0;
+    } else if (language === 'bn') {
+      utterance.rate = Math.max(0.85, Math.min(speed * 0.95, 1.15));
       utterance.pitch = 1.0;
     } else {
       utterance.rate = Math.max(0.80, Math.min(speed * 0.92, 1.25));

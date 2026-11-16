@@ -400,7 +400,7 @@ export interface TtsStatusData {
 
 export interface TtsSynthesizeParams {
   text: string;
-  language: 'en' | 'hi' | 'mr';
+  language: 'en' | 'hi' | 'mr' | 'bn';
   speed?: number;
   voiceGender?: 'female' | 'male';
 }

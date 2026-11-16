@@ -10,6 +10,7 @@ import { motion } from 'framer-motion'
 import { Building2, HelpCircle, Coffee, BookOpen } from 'lucide-react'
 import { useData } from '../context/DataContext'
 import { useNavigate } from 'react-router-dom'
+import { announcePatientCalling } from '../utils/speechAnnouncer'
 
 export default function WaitingRoom() {
   const navigate = useNavigate()
@@ -24,6 +25,8 @@ export default function WaitingRoom() {
   // Real-time clock
   const [currentTime, setCurrentTime] = useState('')
   const [currentDateFormatted, setCurrentDateFormatted] = useState('')
+  const [displayLang, setDisplayLang] = useState<'en' | 'hi' | 'mr' | 'bn'>('en')
+  const [isAnnouncing, setIsAnnouncing] = useState(false)
 
   useEffect(() => {
     const updateTime = () => {
@@ -59,6 +62,20 @@ export default function WaitingRoom() {
   const tokenNext2 = waitingTokens[1] || { token: 'A-015', room: 'Room 02', reason: 'Please stay nearby' }
   const tokenNext3 = waitingTokens[2] || { token: 'B-008', room: 'Room 03', reason: 'Clinic starts 10:00' }
 
+  const handlePlayAnnouncement = () => {
+    if (!soundEnabled) return
+    setIsAnnouncing(true)
+    announcePatientCalling({
+      token: servingToken,
+      patientName: '',
+      room: servingRoom,
+      language: displayLang,
+      onEnd: () => setIsAnnouncing(false)
+    }).finally(() => {
+      setTimeout(() => setIsAnnouncing(false), 3000)
+    })
+  }
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* Breadcrumb + Header */}
@@ -75,15 +92,48 @@ export default function WaitingRoom() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start md:self-auto">
+        <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             <span>Display live</span>
           </span>
+
+          <div className="flex items-center gap-1 p-1 bg-white border border-pale-sage rounded-lg shadow-2xs">
+            {[
+              { key: 'en', label: 'EN' },
+              { key: 'hi', label: 'हिन्दी' },
+              { key: 'mr', label: 'मराठी' },
+              { key: 'bn', label: 'বাংলা' }
+            ].map(l => (
+              <button
+                key={l.key}
+                type="button"
+                onClick={() => setDisplayLang(l.key as any)}
+                className={`px-2 py-0.5 text-xs font-bold rounded transition-all ${
+                  displayLang === l.key
+                    ? 'bg-forest-green text-white shadow-xs'
+                    : 'text-stone-600 hover:text-forest-green'
+                }`}
+              >
+                {l.label}
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={handlePlayAnnouncement}
+            disabled={isAnnouncing}
+            title="Hear token announcement in selected language"
+            className="px-3 py-1.5 rounded-lg border border-pale-sage bg-white text-forest-green hover:bg-pale-sage/40 transition-colors text-xs font-semibold flex items-center gap-1.5 shadow-2xs"
+          >
+            <SpeakerWaveIcon className={`w-4 h-4 ${isAnnouncing ? 'animate-pulse text-emerald-600' : ''}`} />
+            <span>{isAnnouncing ? 'Announcing...' : 'Hear Call'}</span>
+          </button>
+
           <button
             onClick={toggleSound}
             title={soundEnabled ? 'Chime sound is enabled' : 'Chime sound is muted'}
-            className="p-2 rounded-lg border border-pale-sage bg-white text-forest-green hover:bg-pale-sage/40 transition-colors"
+            className="p-2 rounded-lg border border-pale-sage bg-white text-forest-green hover:bg-pale-sage/40 transition-colors shadow-2xs"
           >
             {soundEnabled ? <SpeakerWaveIcon className="w-4 h-4" /> : <SpeakerXMarkIcon className="w-4 h-4 text-stone-400" />}
           </button>
@@ -109,7 +159,14 @@ export default function WaitingRoom() {
               <span className="text-xs uppercase font-bold tracking-widest text-emerald-300">
                 NOW SERVING
               </span>
-              <SpeakerWaveIcon className="w-6 h-6 text-emerald-300/80" />
+              <button
+                type="button"
+                onClick={handlePlayAnnouncement}
+                title="Hear token announcement"
+                className="p-1 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <SpeakerWaveIcon className={`w-6 h-6 ${isAnnouncing ? 'text-emerald-300 animate-pulse' : 'text-emerald-300/80 hover:text-emerald-200'}`} />
+              </button>
             </div>
 
             {/* Token + Destination */}

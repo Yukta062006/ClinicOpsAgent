@@ -87,8 +87,8 @@ export default function ResearchSummary() {
   // Tabs: 'summary' | 'source' | 'notes'
   const [activeTab, setActiveTab] = useState<'summary' | 'source' | 'notes'>('summary')
 
-  // Language state: 'en' | 'hi' | 'mr'
-  const [selectedLanguage, setSelectedLanguage] = useState<'en' | 'hi' | 'mr'>('en')
+  // Language state: 'en' | 'hi' | 'mr' | 'bn'
+  const [selectedLanguage, setSelectedLanguage] = useState<'en' | 'hi' | 'mr' | 'bn'>('en')
   
   // Audio playback & Neural TTS state
   const [audioStatus, setAudioStatus] = useState<'idle' | 'playing' | 'paused'>('idle')
@@ -185,13 +185,39 @@ export default function ResearchSummary() {
         'हृदयविकाराचा धोका कमी करण्यासाठी ही आहार पद्धती जगभरात मान्यताप्राप्त ठरली आहे.'
       ],
       quoteText: 'आजचे आरोग्य शिक्षण, उद्याचे दीर्घायुषी भविष्य.'
+    },
+    bn: {
+      summaryTitle: 'সহজ ভাষার সারসংক্ষেপ (বাংলা)',
+      bigPictureTitle: 'সামগ্রিক খাদ্যভ্যাস এবং রক্তচাপ নিয়ন্ত্রণ।',
+      bigPictureSub: 'ক্লিনিকাল ট্রায়ালের প্রমাণ-ভিত্তিক পর্যালোচনা — আপনার স্বাস্থ্যের প্রেক্ষাপটে।',
+      callout: 'এটি একটি শিক্ষামূলক স্বাস্থ্য সারসংক্ষেপ, কোনো ব্যক্তিগত চিকিৎসা পরামর্শ নয়। যেকোনো খাদ্য বা চিকিৎসার পরিবর্তনের জন্য সর্বদা আপনার চিকিৎসকের পরামর্শ নিন।',
+      q1Title: '০১ গবেষণার মূল প্রশ্ন',
+      q1Text: 'সুষম ও পুষ্টিকর খাদ্যভ্যাসের মাধ্যমে ওষুধ বা অতিরিক্ত লবণ বর্জন ছাড়াই কি উচ্চ রক্তচাপ নিয়ন্ত্রণ করা সম্ভব?',
+      q2Title: '০২ গবেষণায় কী খতিয়ে দেখা হয়েছে',
+      q2Control: 'সাধারণ দৈনন্দিন খাদ্যভ্যাস, যা তুলনামূলক পর্যালোচনার জন্য নিয়ন্ত্রণ হিসেবে ব্যবহৃত হয়েছিল।',
+      q2Fruits: 'টাটকা ফলমূল ও শাকসবজি সমৃদ্ধ খাদ্যভ্যাস, যাতে প্রচুর পটাশিয়াম ও খাদ্য আঁশ রয়েছে।',
+      q2Combo: 'ড্যাশ (DASH) সম্মিলিত খাদ্যভ্যাস: ফলমূল, সবুজ শাকসবজি, কম চর্বিযুক্ত দুগ্ধজাত খাদ্য এবং কম স্যাচুরেটেড ফ্যাট।',
+      q3Title: '০৩ ফলাফল ও ক্লিনিকাল গুরুত্ব',
+      q3Text: 'সম্মিলিত খাদ্যভ্যাস মাত্র দুই সপ্তাহের মধ্যে সিস্টোলিক ও ডায়াস্টোলিক রক্তচাপে অত্যন্ত লক্ষণীয় ও টেকসই হ্রাস নিশ্চিত করেছে।',
+      q4Title: '০৪ গবেষণার সীমাবদ্ধতা',
+      q4Text: [
+        'খাবার একটি নিয়ন্ত্রিত ট্রায়াল পরিবেশে সরবরাহ করা হয়েছিল; বাস্তব জীবনে এটি টেকসই অভ্যাসে রূপান্তর করা প্রয়োজন।',
+        'অংশগ্রহণকারীদের শারীরিক ওজন স্থির রাখা হয়েছিল যাতে পরিবর্তন শুধুমাত্র খাদ্যের গুণমানের কারণে হয়।'
+      ],
+      findingsTitle: 'মূল ক্লিনিকাল ফলাফল',
+      findings: [
+        'ড্যাশ সম্মিলিত খাদ্যভ্যাস গ্রহণের ১৪ দিনের মধ্যেই রক্তচাপ লক্ষণীয়ভাবে কমে আসে।',
+        'উচ্চ রক্তচাপে ভোগা রোগীদের ক্ষেত্রে সিস্টোলিক রক্তচাপে সর্বোচ্চ ১১.৪ mmHg পর্যন্ত হ্রাস লক্ষ্য করা গেছে।',
+        'এই ফলাফল বিভিন্ন বয়সের প্রাপ্তবয়স্কদের মধ্যে নির্ভরযোগ্য ও সুনির্দিষ্ট প্রমাণিত হয়েছে।'
+      ],
+      quoteText: 'আজকের সঠিক জ্ঞান, আগামীকালের সুস্থ জীবন।'
     }
   }
 
   const currentContent = translations[selectedLanguage] || translations.en
 
   // Pick a natural, soft, professional female voice using unified speechAnnouncer
-  const getFemaleVoice = (lang: 'en' | 'hi' | 'mr'): SpeechSynthesisVoice | null => {
+  const getFemaleVoice = (lang: 'en' | 'hi' | 'mr' | 'bn'): SpeechSynthesisVoice | null => {
     return getFemaleSpeechVoice(lang)
   }
 
@@ -271,6 +297,7 @@ export default function ResearchSummary() {
 
       if (selectedLanguage === 'hi') utterance.lang = 'hi-IN'
       else if (selectedLanguage === 'mr') utterance.lang = 'mr-IN'
+      else if (selectedLanguage === 'bn') utterance.lang = 'bn-IN'
       else utterance.lang = 'en-IN'
 
       const femaleVoice = getFemaleVoice(selectedLanguage)
@@ -284,7 +311,8 @@ export default function ResearchSummary() {
       // Smooth, natural reading cadence with natural vocal pitch
       const isHi = selectedLanguage === 'hi'
       const isMr = selectedLanguage === 'mr'
-      const rateMultiplier = isHi ? 0.98 : (isMr ? 0.96 : 0.92)
+      const isBn = selectedLanguage === 'bn'
+      const rateMultiplier = isHi ? 0.98 : (isMr ? 0.96 : (isBn ? 0.95 : 0.92))
       utterance.rate = Math.max(0.75, Math.min(speechSpeed * rateMultiplier, 1.25))
       utterance.pitch = 1.0
       utterance.volume = isMuted ? 0 : volume
@@ -336,6 +364,8 @@ export default function ResearchSummary() {
       textToRead = `डैश आहार और रक्तचाप नियंत्रण अध्ययन। ${currentContent.bigPictureTitle} ${currentContent.callout} ${currentContent.q1Title}: ${currentContent.q1Text} ${currentContent.q3Title}: ${currentContent.q3Text} ${currentContent.findingsTitle}: ${currentContent.findings.join('. ')}`
     } else if (selectedLanguage === 'mr') {
       textToRead = `डॅश आहार आणि रक्तदाब नियंत्रण अभ्यास। ${currentContent.bigPictureTitle} ${currentContent.callout} ${currentContent.q1Title}: ${currentContent.q1Text} ${currentContent.q3Title}: ${currentContent.q3Text} ${currentContent.findingsTitle}: ${currentContent.findings.join('. ')}`
+    } else if (selectedLanguage === 'bn') {
+      textToRead = `ড্যাশ খাদ্যভ্যাস ও রক্তচাপ নিয়ন্ত্রণ গবেষণা সারসংক্ষেপ। ${currentContent.bigPictureTitle} ${currentContent.callout} ${currentContent.q1Title}: ${currentContent.q1Text} ${currentContent.q3Title}: ${currentContent.q3Text} ${currentContent.findingsTitle}: ${currentContent.findings.join('. ')}`
     } else {
       textToRead = `${safeArticle.title}. ${currentContent.bigPictureTitle}. ${currentContent.callout}. ${currentContent.q1Title}: ${currentContent.q1Text}. ${currentContent.q3Title}: ${currentContent.q3Text}. ${currentContent.findingsTitle}: ${currentContent.findings.join('. ')}`
     }
@@ -590,6 +620,17 @@ export default function ResearchSummary() {
             }`}
           >
             मराठी
+          </button>
+          <button
+            onClick={() => {
+              handleStopAudio()
+              setSelectedLanguage('bn')
+            }}
+            className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
+              selectedLanguage === 'bn' ? 'bg-[#1B3E2F] text-white' : 'text-[#5A6D62] hover:text-[#1B3E2F]'
+            }`}
+          >
+            বাংলা
           </button>
         </div>
       </div>
