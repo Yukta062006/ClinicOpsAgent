@@ -108,10 +108,15 @@ export default function PatientDashboard() {
     }
 
     if (linkAbhaStatus && !linkAbhaStatus.configured) {
-      setLinkAbhaError(
-        `ABDM verification is currently unavailable on this server. Missing credentials: ${linkAbhaStatus.missing.join(', ')}.`
-      )
-      return
+      const refreshed = await apiAbha.status()
+      if (refreshed.success && refreshed.data?.configured) {
+        setLinkAbhaStatus(refreshed.data)
+      } else {
+        setLinkAbhaError(
+          `ABDM verification is currently unavailable on this server. Missing credentials: ${linkAbhaStatus.missing.join(', ')}. Please restart the backend server (npm run dev) to load the ABDM Sandbox.`
+        )
+        return
+      }
     }
 
     setLinkAbhaBusy(true)
@@ -1159,6 +1164,11 @@ export default function PatientDashboard() {
                   />
                   <p className="text-[10px] text-[#5A6D62] mt-1">
                     ABDM will send an Aadhaar OTP to your registered phone to confirm ownership.
+                    {linkAbhaStatus?.environment === 'sandbox' && (
+                      <span className="block mt-0.5 text-emerald-800 font-semibold">
+                        💡 Sandbox active: use OTP <span className="font-mono font-bold">123456</span> to verify.
+                      </span>
+                    )}
                   </p>
                 </div>
 
@@ -1171,7 +1181,7 @@ export default function PatientDashboard() {
                 <div className="flex gap-2">
                   <button
                     onClick={handleRequestLinkOtp}
-                    disabled={linkAbhaBusy || linkAbhaNumber.replace(/[^0-9]/g, '').length !== 14 || (linkAbhaStatus?.configured === false)}
+                    disabled={linkAbhaBusy || linkAbhaNumber.replace(/[^0-9]/g, '').length !== 14}
                     className="flex-1 py-2.5 bg-forest-green text-white rounded-xl text-xs font-bold hover:bg-forest-green/90 disabled:opacity-50"
                   >
                     {linkAbhaBusy ? 'Requesting OTP…' : 'Send ABDM OTP'}

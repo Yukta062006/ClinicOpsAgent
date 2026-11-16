@@ -7,11 +7,18 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import Database from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
+import { fileURLToPath } from 'url';
 import { createAbdmClient, AbdmError } from './server-abdm.mjs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Optional .env and .env.local support (Node 20.12+).
 try {
-  process.loadEnvFile?.('.env.local');
+  process.loadEnvFile?.(path.resolve(__dirname, '.env.local'));
+} catch { }
+try {
+  process.loadEnvFile?.(path.resolve(__dirname, '.env'));
 } catch { }
 try {
   process.loadEnvFile?.();

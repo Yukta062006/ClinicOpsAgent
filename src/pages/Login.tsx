@@ -98,11 +98,16 @@ export default function Login() {
     }
 
     if (abhaStatus && !abhaStatus.configured) {
-      setError(
-        `Live ABHA verification is not configured on this server. Missing: ${abhaStatus.missing.join(', ')}. ` +
-          'An administrator must add ABDM sandbox credentials before ABHA sign-in can work.'
-      )
-      return
+      const refreshed = await apiAbha.status()
+      if (refreshed.success && refreshed.data?.configured) {
+        setAbhaStatus(refreshed.data)
+      } else {
+        setError(
+          `Live ABHA verification is not configured on this server. Missing: ${abhaStatus.missing.join(', ')}. ` +
+            'Please restart the backend server (npm run dev) to load the ABDM Sandbox configuration.'
+        )
+        return
+      }
     }
 
     setIsLoading(true)
@@ -376,10 +381,25 @@ export default function Login() {
             <>
               {abhaStatus && !abhaStatus.configured && (
                 <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-relaxed">
-                  <p className="font-bold mb-1">Live ABDM verification is not configured</p>
-                  <p>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="font-bold">Live ABDM verification is not configured</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        apiAbha.status().then((res) => {
+                          if (res.success && res.data) setAbhaStatus(res.data)
+                        })
+                      }}
+                      className="text-[10px] text-forest-green font-bold hover:underline"
+                    >
+                      Refresh status ↻
+                    </button>
+                  </div>
+                  <p className="mb-1">
                     This server is missing <span className="font-mono">{abhaStatus.missing.join(', ')}</span>.
-                    ABHA sign-in stays disabled until an administrator adds ABDM credentials. Email sign-in is unaffected.
+                  </p>
+                  <p className="text-[10px] text-amber-800">
+                    If you recently updated <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">.env</code>, restart the server (stop and run <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">npm run dev</code>), then click <strong>Refresh status</strong>.
                   </p>
                 </div>
               )}
@@ -425,6 +445,11 @@ export default function Login() {
                   <p className="text-[10px] text-[#5A6D62] mt-1.5 leading-relaxed">
                     ABDM sends an Aadhaar OTP to the mobile number linked with this ABHA. A ClinicOps
                     password is not used for ABHA sign-in.
+                    {abhaStatus?.environment === 'sandbox' && (
+                      <span className="block mt-1 text-emerald-800 font-semibold">
+                        💡 Sandbox active: use OTP <span className="font-mono font-bold">123456</span> to verify.
+                      </span>
+                    )}
                   </p>
                 </div>
               ) : (
@@ -517,7 +542,7 @@ export default function Login() {
 
           <button
             type="submit"
-            disabled={isLoading || (loginMethod === 'abha' && abhaStatus?.configured === false)}
+            disabled={isLoading}
             className="w-full py-3 rounded-xl bg-forest-green text-white font-semibold text-xs tracking-wider uppercase hover:bg-forest-green/90 transition-all shadow-xs disabled:opacity-50"
           >
             {isLoading

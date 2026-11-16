@@ -122,10 +122,16 @@ export default function Signup() {
     setAbhaInfo('')
 
     if (abhaStatus && !abhaStatus.configured) {
-      setAbhaError(
-        `ABHA verification is not configured on this server. Missing: ${abhaStatus.missing.join(', ')}.`
-      )
-      return
+      const refreshed = await apiAbha.status()
+      if (refreshed.success && refreshed.data?.configured) {
+        setAbhaStatus(refreshed.data)
+      } else {
+        setAbhaError(
+          `ABHA verification is not configured on this server. Missing: ${abhaStatus.missing.join(', ')}. ` +
+            'Please restart the backend server (npm run dev) to load the ABDM Sandbox configuration.'
+        )
+        return
+      }
     }
 
     if (abhaAction === 'existing' && abhaNumber.replace(/[^0-9]/g, '').length !== 14) {
@@ -693,30 +699,48 @@ export default function Signup() {
                       </div>
                     </div>
 
-                    {abhaStatus && !abhaStatus.configured ? (
-                      <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-relaxed">
-                        <p className="font-bold mb-0.5">Live ABDM verification is unavailable</p>
+                    {abhaStatus && !abhaStatus.configured && (
+                      <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-relaxed space-y-1">
+                        <div className="flex items-center justify-between">
+                          <p className="font-bold">Live ABDM verification is unconfigured</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              apiAbha.status().then((res) => {
+                                if (res.success && res.data) setAbhaStatus(res.data)
+                              })
+                            }}
+                            className="text-[10px] text-forest-green font-bold hover:underline"
+                          >
+                            Refresh status ↻
+                          </button>
+                        </div>
                         <p>
                           This server is missing <span className="font-mono">{abhaStatus.missing.join(', ')}</span>.
-                          You can still enter your ABHA number above; it will be stored in your patient record as <strong>Not verified</strong> until official ABDM credentials are provided. Your email/password registration is not blocked.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="pt-1">
-                        <button
-                          type="button"
-                          onClick={requestAbhaOtp}
-                          disabled={abhaBusy || abhaNumber.replace(/[^0-9]/g, '').length !== 14}
-                          className="w-full py-2.5 rounded-xl bg-forest-green text-white text-[11px] font-bold hover:bg-forest-green/90 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
-                        >
-                          <ShieldCheckIcon className="w-3.5 h-3.5" />
-                          {abhaBusy ? 'Requesting ABDM OTP…' : 'Send ABDM OTP to Verify'}
-                        </button>
-                        <p className="text-[10px] text-[#5A6D62] mt-1 text-center">
-                          ABDM sends a 6-digit OTP to the mobile number registered against this ABHA's Aadhaar.
+                          Please restart the backend (<code className="bg-amber-100 px-1 py-0.5 rounded font-mono">npm run dev</code>) to enable Sandbox mode.
                         </p>
                       </div>
                     )}
+
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={requestAbhaOtp}
+                        disabled={abhaBusy || abhaNumber.replace(/[^0-9]/g, '').length !== 14}
+                        className="w-full py-2.5 rounded-xl bg-forest-green text-white text-[11px] font-bold hover:bg-forest-green/90 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      >
+                        <ShieldCheckIcon className="w-3.5 h-3.5" />
+                        {abhaBusy ? 'Requesting ABDM OTP…' : 'Send ABDM OTP to Verify'}
+                      </button>
+                      <p className="text-[10px] text-[#5A6D62] mt-1 text-center">
+                        ABDM sends a 6-digit OTP to the mobile number registered against this ABHA's Aadhaar.
+                        {abhaStatus?.environment === 'sandbox' && (
+                          <span className="block mt-0.5 text-emerald-800 font-semibold">
+                            💡 Sandbox active: use OTP <span className="font-mono font-bold">123456</span> to verify.
+                          </span>
+                        )}
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
