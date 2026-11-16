@@ -227,15 +227,19 @@ export const apiAbha = {
   verifyExistingAbha: (challengeId: string, otp: string) =>
     post<AbhaEnrollmentResult>('/abha/verify/verify', { challenge_id: challengeId, otp }),
 
-  requestLinkOtp: (token: string, abhaNumber: string) =>
-    post<AbhaChallenge>('/abha/link/request-otp', { abha_number: abhaNumber }, token),
+  requestLinkOtp: (token?: string, abhaNumber: string = '') => {
+    const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('clinicops_token') || '' : '');
+    return post<AbhaChallenge>('/abha/link/request-otp', { abha_number: abhaNumber }, activeToken);
+  },
 
-  verifyLinkOtp: (token: string, challengeId: string, otp: string) =>
-    post<{ user: RegisteredUser; abha: { verified: boolean; masked: string } }>(
+  verifyLinkOtp: (token: string | undefined, challengeId: string, otp: string) => {
+    const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('clinicops_token') || '' : '');
+    return post<{ user: RegisteredUser; abha: { verified: boolean; masked: string } }>(
       '/abha/link/verify',
       { challenge_id: challengeId, otp },
-      token
-    ),
+      activeToken
+    );
+  },
 };
 
 // Patients API

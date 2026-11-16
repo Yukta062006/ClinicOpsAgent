@@ -90,28 +90,33 @@ function upstreamCode(payload) {
  * }} options
  */
 export function createAbdmClient({ env = process.env, fetchImpl = globalThis.fetch, logger = console } = {}) {
-  const requestedEnvironment = String(env.ABDM_ENVIRONMENT || 'sandbox').trim().toLowerCase();
-  const environment = requestedEnvironment === 'production' ? 'production' : 'sandbox';
-  const urls = {
-    ...ENVIRONMENTS[environment],
-    abhaBaseUrl: (env.ABDM_ABHA_BASE_URL || ENVIRONMENTS[environment].abhaBaseUrl).replace(/\/$/, ''),
-    sessionUrl: (env.ABDM_SESSION_URL || ENVIRONMENTS[environment].sessionUrl).replace(/\/$/, ''),
-  };
+  function getConfig() {
+    const requestedEnvironment = String(env.ABDM_ENVIRONMENT || 'sandbox').trim().toLowerCase();
+    const environment = requestedEnvironment === 'production' ? 'production' : 'sandbox';
+    const urls = {
+      ...ENVIRONMENTS[environment],
+      abhaBaseUrl: (env.ABDM_ABHA_BASE_URL || ENVIRONMENTS[environment].abhaBaseUrl || '').replace(/\/$/, ''),
+      sessionUrl: (env.ABDM_SESSION_URL || ENVIRONMENTS[environment].sessionUrl || '').replace(/\/$/, ''),
+    };
 
-  const clientId = String(env.ABDM_CLIENT_ID || '').trim();
-  const clientSecret = String(env.ABDM_CLIENT_SECRET || '').trim();
-  const configuredTimeout = Number(env.ABDM_TIMEOUT_MS);
-  const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0 ? configuredTimeout : DEFAULT_TIMEOUT_MS;
+    const clientId = String(env.ABDM_CLIENT_ID || '').trim();
+    const clientSecret = String(env.ABDM_CLIENT_SECRET || '').trim();
+    const configuredTimeout = Number(env.ABDM_TIMEOUT_MS);
+    const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0 ? configuredTimeout : DEFAULT_TIMEOUT_MS;
 
-  const missing = [];
-  if (!clientId) missing.push('ABDM_CLIENT_ID');
-  if (!clientSecret) missing.push('ABDM_CLIENT_SECRET');
-  const configured = missing.length === 0;
+    const missing = [];
+    if (!clientId) missing.push('ABDM_CLIENT_ID');
+    if (!clientSecret) missing.push('ABDM_CLIENT_SECRET');
+    const configured = missing.length === 0;
+
+    return { environment, urls, clientId, clientSecret, timeoutMs, missing, configured };
+  }
 
   let tokenCache = null;
   let certificateCache = null;
 
   async function httpJson(url, { method = 'GET', headers = {}, body } = {}) {
+    const { timeoutMs } = getConfig();
     let response;
     try {
       response = await fetchImpl(url, {
@@ -121,6 +126,7 @@ export function createAbdmClient({ env = process.env, fetchImpl = globalThis.fet
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (error) {
+      if (error instanceof AbdmError) throw error;
       throw new AbdmError(
         'The ABDM service could not be reached. Check the server network connection and try again.',
         { code: 'ABDM_UNREACHABLE', status: 503, retryable: true }
@@ -154,6 +160,7 @@ export function createAbdmClient({ env = process.env, fetchImpl = globalThis.fet
   }
 
   async function getAccessToken({ force = false } = {}) {
+    const { configured, missing, urls, clientId, clientSecret } = getConfig();
     if (!configured) {
       throw new AbdmError(
         `ABHA services are not configured on this server. Missing: ${missing.join(', ')}.`,
@@ -203,6 +210,7 @@ export function createAbdmClient({ env = process.env, fetchImpl = globalThis.fet
 
   async function abhaRequest(path, { method = 'POST', body, extraHeaders = {} } = {}, isRetry = false) {
     const accessToken = await getAccessToken({ force: isRetry });
+    const { urls } = getConfig();
     const headers = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
@@ -296,6 +304,7 @@ export function createAbdmClient({ env = process.env, fetchImpl = globalThis.fet
 
   return {
     describe() {
+      const { configured, environment, missing, urls } = getConfig();
       return {
         configured,
         environment,
@@ -309,7 +318,12 @@ export function createAbdmClient({ env = process.env, fetchImpl = globalThis.fet
     },
 
     isConfigured() {
-      return configured;
+      return getConfig().configured;
+    },
+
+    clearCaches() {
+      tokenCache = null;
+      certificateCache = null;
     },
 
     /** Sends an Aadhaar OTP for ABHA-number login. */

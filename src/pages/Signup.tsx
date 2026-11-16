@@ -32,6 +32,7 @@ export default function Signup() {
   // and the server issues a short-lived verification proof.
   const [abhaNumber, setAbhaNumber] = useState('')
   const [abhaStatus, setAbhaStatus] = useState<AbhaStatus | null>(null)
+  const [abhaChoice, setAbhaChoice] = useState<'none' | 'existing' | 'create'>('none')
   const [abhaAction, setAbhaAction] = useState<'existing' | 'create' | null>(null)
   const [abhaStep, setAbhaStep] = useState<'input' | 'otp' | 'verified'>('input')
   const [abhaChallengeId, setAbhaChallengeId] = useState('')
@@ -79,6 +80,7 @@ export default function Signup() {
     const prefill = searchParams.get('abha')?.replace(/[^0-9]/g, '').slice(0, 14) || ''
     if (prefill.length === 14) {
       setAbhaNumber(formatAbha(prefill))
+      setAbhaChoice('existing')
       setAbhaAction('existing')
     }
 
@@ -90,6 +92,7 @@ export default function Signup() {
   }, [])
 
   const resetAbhaFlow = () => {
+    setAbhaChoice('none')
     setAbhaAction(null)
     setAbhaStep('input')
     setAbhaChallengeId('')
@@ -99,6 +102,10 @@ export default function Signup() {
     setAbhaConsent(false)
     setAbhaError('')
     setAbhaInfo('')
+    setAbhaNumber('')
+    setAbhaVerificationToken('')
+    setVerifiedAbhaName('')
+    setAbhaAddress('')
   }
 
   const removeAbhaVerification = () => {
@@ -106,7 +113,6 @@ export default function Signup() {
     setVerifiedAbhaName('')
     setAbhaAddress('')
     setAbhaStep('input')
-    setAbhaAction(null)
     setAbhaError('')
     setAbhaInfo('')
   }
@@ -227,19 +233,34 @@ export default function Signup() {
       setError('Please provide a mobile number so the clinic can reach you.')
       return
     }
-    if (abhaNumber.trim()) {
-      const cleanAbha = abhaNumber.replace(/[^0-9]/g, '')
-      if (cleanAbha.length !== 14) {
-        setError('An ABHA number must be 14 digits (format: XX-XXXX-XXXX-XXXX). Leave the field empty if you do not have one.')
+    if (abhaChoice === 'existing') {
+      if (abhaNumber.trim()) {
+        const cleanAbha = abhaNumber.replace(/[^0-9]/g, '')
+        if (cleanAbha.length !== 14) {
+          setError('An ABHA number must be 14 digits (format: XX-XXXX-XXXX-XXXX). Select "I don\'t have an ABHA number" if you do not have one.')
+          return
+        }
+      } else {
+        setError('Please enter your 14-digit ABHA number or select "I don\'t have an ABHA number".')
+        return
+      }
+      if (abhaStep === 'otp') {
+        setError('Complete the ABDM OTP verification or cancel before submitting your registration.')
+        return
+      }
+    } else if (abhaChoice === 'create') {
+      if (abhaStatus && !abhaStatus.configured) {
+        setError('ABHA creation via ABDM is currently unavailable. Please select "I don\'t have an ABHA number" to complete your registration.')
+        return
+      }
+      if (abhaStep !== 'verified') {
+        setError('Complete the ABHA creation steps or select "I don\'t have an ABHA number" to register.')
         return
       }
     }
+
     if (!consent) {
       setError('Please confirm the health data consent declaration before registering.')
-      return
-    }
-    if (abhaAction !== null && abhaStep !== 'verified') {
-      setError('Finish or cancel the ABHA verification before creating your account.')
       return
     }
 
@@ -256,8 +277,8 @@ export default function Signup() {
         gender,
         address: address.trim() || undefined,
         emergency_contact: emergencyContact.trim() || undefined,
-        abha_id: abhaNumber.trim() || undefined,
-        abha_verification_token: abhaVerificationToken || undefined
+        abha_id: abhaChoice === 'none' ? undefined : (abhaNumber.trim() || undefined),
+        abha_verification_token: abhaChoice === 'none' ? undefined : (abhaVerificationToken || undefined)
       })
 
       if (!result.success || !result.user) {
@@ -455,133 +476,351 @@ export default function Signup() {
               <div className="flex items-center gap-1.5">
                 <IdentificationIcon className="w-4 h-4 text-forest-green" />
                 <span className="text-xs font-bold text-forest-green uppercase tracking-wider">
-                  Ayushman Bharat Health Account (optional)
+                  Ayushman Bharat Health Account (ABHA)
                 </span>
               </div>
-              <span
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                  abhaStep === 'verified'
-                    ? 'bg-emerald-50 text-emerald-800'
-                    : 'bg-stone-100 text-stone-600'
-                }`}
-              >
-                {abhaStep === 'verified' ? 'Verified with ABDM' : 'Not verified'}
-              </span>
+              {/* Dynamic Status Badge */}
+              {abhaChoice === 'none' ? (
+                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-stone-100 text-stone-600 border border-stone-200">
+                  ⚪ Not linked
+                </span>
+              ) : abhaStep === 'verified' ? (
+                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                  ✓ Verified
+                </span>
+              ) : abhaStatus && !abhaStatus.configured ? (
+                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                  ℹ Verification unavailable
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                  ⚠ Not verified
+                </span>
+              )}
             </div>
 
-            {abhaStatus && !abhaStatus.configured && (
-              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-relaxed">
-                <p className="font-bold mb-0.5">ABHA verification is currently unavailable</p>
-                <p>
-                  This server is missing <span className="font-mono">{abhaStatus.missing.join(', ')}</span>.
-                  You can still register and enter your ABHA manually; it will be stored as unverified.
-                  Email and password registration continues to work normally.
+            {/* Three Clear Options */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setAbhaChoice('none')
+                  resetAbhaFlow()
+                }}
+                className={`p-2.5 rounded-xl border text-left transition-all ${
+                  abhaChoice === 'none'
+                    ? 'border-forest-green bg-[#F4F8F4] text-forest-green shadow-xs'
+                    : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-bold">I don't have ABHA</span>
+                  <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-stone-100 text-stone-600">
+                    Optional
+                  </span>
+                </div>
+                <p className="text-[10px] text-[#5A6D62] leading-tight">
+                  Register with email & password. Link later anytime.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAbhaChoice('existing')
+                  setAbhaAction('existing')
+                  setAbhaStep('input')
+                  setAbhaError('')
+                  setAbhaInfo('')
+                }}
+                className={`p-2.5 rounded-xl border text-left transition-all ${
+                  abhaChoice === 'existing'
+                    ? 'border-forest-green bg-[#F4F8F4] text-forest-green shadow-xs'
+                    : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-bold">I have an ABHA</span>
+                  <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-800">
+                    14 digits
+                  </span>
+                </div>
+                <p className="text-[10px] text-[#5A6D62] leading-tight">
+                  Enter your number and verify via ABDM OTP.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAbhaChoice('create')
+                  setAbhaAction('create')
+                  setAbhaNumber('')
+                  setAbhaStep('input')
+                  setAbhaError('')
+                  setAbhaInfo('')
+                }}
+                className={`p-2.5 rounded-xl border text-left transition-all ${
+                  abhaChoice === 'create'
+                    ? 'border-forest-green bg-[#F4F8F4] text-forest-green shadow-xs'
+                    : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] font-bold">Create new ABHA</span>
+                  <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-800">
+                    Aadhaar
+                  </span>
+                </div>
+                <p className="text-[10px] text-[#5A6D62] leading-tight">
+                  Enrol online with ABDM via Aadhaar OTP.
+                </p>
+              </button>
+            </div>
+
+            {/* Option 1 Content: I don't have an ABHA number */}
+            {abhaChoice === 'none' && (
+              <div className="p-3.5 rounded-xl bg-[#F8FAF8] border border-[#E2ECE4] text-xs space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-[#1B3E2F]">Standard Registration</span>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-stone-100 text-stone-600 border border-stone-200">
+                    ⚪ Not linked
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#5A6D62] leading-relaxed">
+                  You can complete registration without an ABHA number. You will receive a standard ClinicOps patient account with full access to appointments, doctor consultations, and medical records. You can link an ABHA account later at any time from your Patient Dashboard.
                 </p>
               </div>
             )}
 
-            {abhaStep === 'verified' ? (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs space-y-1">
-                <p className="font-mono font-bold text-emerald-900">{abhaNumber}</p>
-                {verifiedAbhaName && <p className="text-emerald-800">{verifiedAbhaName}</p>}
-                {abhaAddress && <p className="font-mono text-[11px] text-emerald-700">{abhaAddress}</p>}
-                <p className="text-[11px] text-emerald-800 leading-relaxed">
-                  Ownership confirmed by ABDM. The clinic will store this number as verified.
-                </p>
-                <button
-                  type="button"
-                  onClick={removeAbhaVerification}
-                  className="text-[11px] font-semibold text-emerald-900 underline"
-                >
-                  Remove verification
-                </button>
-              </div>
-            ) : abhaAction === null ? (
-              <div className="space-y-2">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-800 mb-1">
-                    ABHA Number
-                  </label>
-                  <div className="relative">
-                    <IdentificationIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="off"
-                      value={abhaNumber}
-                      onChange={(e) => handleAbhaChange(e.target.value)}
-                      placeholder="XX-XXXX-XXXX-XXXX"
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] font-mono text-xs text-stone-800 placeholder-stone-400 focus:outline-hidden focus:border-forest-green focus:bg-white"
-                    />
-                  </div>
-                </div>
-
-                {abhaStatus?.configured && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {/* Option 2 Content: I already have an ABHA number */}
+            {abhaChoice === 'existing' && (
+              <div className="space-y-3">
+                {abhaStep === 'verified' ? (
+                  <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3.5 text-xs space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono font-bold text-emerald-950 text-sm tracking-wide">{abhaNumber}</span>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-200 text-emerald-900 border border-emerald-400">
+                        ✓ Verified
+                      </span>
+                    </div>
+                    {verifiedAbhaName && <p className="text-emerald-850 font-medium">Name: {verifiedAbhaName}</p>}
+                    {abhaAddress && <p className="font-mono text-[11px] text-emerald-700">ABHA Address: {abhaAddress}</p>}
+                    <p className="text-[11px] text-emerald-800 leading-relaxed">
+                      Identity ownership verified via ABDM OTP. This will be linked to your ClinicOps record upon registration.
+                    </p>
                     <button
                       type="button"
-                      onClick={() => {
-                        setAbhaAction('existing')
-                        setAbhaError('')
-                        setAbhaInfo('')
-                      }}
-                      className="px-3 py-2 rounded-xl border border-forest-green/30 bg-[#F4F8F4] text-[11px] font-bold text-forest-green hover:bg-[#EFF5EE] flex items-center justify-center gap-1.5"
+                      onClick={removeAbhaVerification}
+                      className="text-[11px] font-semibold text-emerald-900 underline hover:text-emerald-700 pt-1"
                     >
-                      <ShieldCheckIcon className="w-3.5 h-3.5" />
-                      Verify an existing ABHA
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAbhaNumber('')
-                        setAbhaAction('create')
-                        setAbhaError('')
-                        setAbhaInfo('')
-                      }}
-                      className="px-3 py-2 rounded-xl border border-forest-green/30 bg-[#F4F8F4] text-[11px] font-bold text-forest-green hover:bg-[#EFF5EE] flex items-center justify-center gap-1.5"
-                    >
-                      <IdentificationIcon className="w-3.5 h-3.5" />
-                      Create a new ABHA
+                      Change / remove verification
                     </button>
                   </div>
-                )}
-
-                <p className="text-[11px] text-[#5A6D62] flex items-start gap-1">
-                  <InformationCircleIcon className="w-3.5 h-3.5 text-emerald-700 shrink-0 mt-0.5" />
-                  <span>
-                    Without ABDM verification the number is stored as unverified. Leave it blank if you
-                    do not have an ABHA number.
-                  </span>
-                </p>
-              </div>
-            ) : abhaStep === 'input' ? (
-              <div className="space-y-2">
-                {abhaAction === 'existing' ? (
-                  <div>
-                    <label className="block text-xs font-semibold text-stone-800 mb-1">
-                      ABHA Number to verify
-                    </label>
+                ) : abhaStep === 'otp' ? (
+                  <div className="space-y-2 p-3 rounded-xl bg-[#F7FAF7] border border-[#E2ECE4]">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-forest-green">Enter ABDM OTP</p>
+                      <span className="text-[10px] text-[#5A6D62]">6 digits</span>
+                    </div>
+                    <p className="text-[11px] text-stone-700">
+                      Enter the 6-digit OTP sent by ABDM to <strong>{maskedAbha}</strong>.
+                    </p>
                     <div className="relative">
-                      <IdentificationIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
+                      <ShieldCheckIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
                       <input
                         type="text"
                         inputMode="numeric"
-                        autoComplete="off"
-                        value={abhaNumber}
-                        onChange={(e) => handleAbhaChange(e.target.value)}
-                        placeholder="XX-XXXX-XXXX-XXXX"
-                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] font-mono text-xs text-stone-800 placeholder-stone-400 focus:outline-hidden focus:border-forest-green focus:bg-white"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        value={abhaOtp}
+                        onChange={(e) => setAbhaOtp(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                        placeholder="••••••"
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-white font-mono tracking-[0.4em] text-sm text-stone-800 focus:outline-hidden focus:border-forest-green"
                       />
                     </div>
-                    <p className="text-[10px] text-[#5A6D62] mt-1">
-                      ABDM sends an OTP to the mobile number linked with this ABHA&apos;s Aadhaar.
-                    </p>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={verifyAbhaOtp}
+                        disabled={abhaBusy || abhaOtp.length !== 6}
+                        className="flex-1 py-2 rounded-xl bg-forest-green text-white text-[11px] font-bold disabled:opacity-50"
+                      >
+                        {abhaBusy ? 'Verifying with ABDM…' : 'Verify with ABDM'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAbhaStep('input')
+                          setAbhaOtp('')
+                          setAbhaError('')
+                          setAbhaInfo('')
+                        }}
+                        className="px-3 py-2 rounded-xl border border-stone-200 text-[11px] font-semibold text-stone-600 hover:bg-stone-50"
+                      >
+                        Back
+                      </button>
+                    </div>
                   </div>
                 ) : (
-                  <>
+                  <div className="space-y-2">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-semibold text-stone-800">
+                          14-Digit ABHA Number
+                        </label>
+                        {abhaStatus && !abhaStatus.configured ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-200">
+                            Verification unavailable
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-[#5A6D62]">
+                            Format: XX-XXXX-XXXX-XXXX
+                          </span>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <IdentificationIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete="off"
+                          value={abhaNumber}
+                          onChange={(e) => handleAbhaChange(e.target.value)}
+                          placeholder="XX-XXXX-XXXX-XXXX"
+                          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] font-mono text-xs text-stone-800 placeholder-stone-400 focus:outline-hidden focus:border-forest-green focus:bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    {abhaStatus && !abhaStatus.configured ? (
+                      <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-relaxed">
+                        <p className="font-bold mb-0.5">Live ABDM verification is unavailable</p>
+                        <p>
+                          This server is missing <span className="font-mono">{abhaStatus.missing.join(', ')}</span>.
+                          You can still enter your ABHA number above; it will be stored in your patient record as <strong>Not verified</strong> until official ABDM credentials are provided. Your email/password registration is not blocked.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          onClick={requestAbhaOtp}
+                          disabled={abhaBusy || abhaNumber.replace(/[^0-9]/g, '').length !== 14}
+                          className="w-full py-2.5 rounded-xl bg-forest-green text-white text-[11px] font-bold hover:bg-forest-green/90 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                        >
+                          <ShieldCheckIcon className="w-3.5 h-3.5" />
+                          {abhaBusy ? 'Requesting ABDM OTP…' : 'Send ABDM OTP to Verify'}
+                        </button>
+                        <p className="text-[10px] text-[#5A6D62] mt-1 text-center">
+                          ABDM sends a 6-digit OTP to the mobile number registered against this ABHA's Aadhaar.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Option 3 Content: I want to create an ABHA number */}
+            {abhaChoice === 'create' && (
+              <div className="space-y-3">
+                {abhaStatus && !abhaStatus.configured ? (
+                  <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-amber-900">ABHA Creation Unavailable</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-950">
+                        Credentials missing
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-amber-900 leading-relaxed">
+                      Direct ABHA creation via ABDM requires active <span className="font-mono">ABDM_CLIENT_ID</span> and <span className="font-mono">ABDM_CLIENT_SECRET</span> on the server.
+                    </p>
+                    <p className="text-[11px] text-stone-700 leading-relaxed">
+                      You can complete your ClinicOps registration right now without an ABHA, or create an ABHA on the official government portal (<a href="https://abha.abdm.gov.in" target="_blank" rel="noopener noreferrer" className="underline font-bold text-forest-green">abha.abdm.gov.in</a>) and link it later from your dashboard.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAbhaChoice('none')
+                        resetAbhaFlow()
+                      }}
+                      className="w-full py-2 rounded-xl bg-forest-green text-white text-[11px] font-bold hover:bg-forest-green/90"
+                    >
+                      Continue without ABHA (Register with Email)
+                    </button>
+                  </div>
+                ) : abhaStep === 'verified' ? (
+                  <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3.5 text-xs space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono font-bold text-emerald-950 text-sm tracking-wide">{abhaNumber}</span>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-200 text-emerald-900 border border-emerald-400">
+                        ✓ Created & Verified
+                      </span>
+                    </div>
+                    {verifiedAbhaName && <p className="text-emerald-850 font-medium">Name: {verifiedAbhaName}</p>}
+                    {abhaAddress && <p className="font-mono text-[11px] text-emerald-700">ABHA Address: {abhaAddress}</p>}
+                    <p className="text-[11px] text-emerald-800 leading-relaxed">
+                      Your new ABHA has been registered with ABDM and will be linked to your ClinicOps patient profile.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={removeAbhaVerification}
+                      className="text-[11px] font-semibold text-emerald-900 underline hover:text-emerald-700 pt-1"
+                    >
+                      Start over
+                    </button>
+                  </div>
+                ) : abhaStep === 'otp' ? (
+                  <div className="space-y-2 p-3 rounded-xl bg-[#F7FAF7] border border-[#E2ECE4]">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-forest-green">Enter Aadhaar OTP</p>
+                      <span className="text-[10px] text-[#5A6D62]">6 digits</span>
+                    </div>
+                    <p className="text-[11px] text-stone-700">
+                      Enter the 6-digit Aadhaar OTP sent by ABDM to your registered mobile number.
+                    </p>
+                    <div className="relative">
+                      <ShieldCheckIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        value={abhaOtp}
+                        onChange={(e) => setAbhaOtp(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                        placeholder="••••••"
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-white font-mono tracking-[0.4em] text-sm text-stone-800 focus:outline-hidden focus:border-forest-green"
+                      />
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={verifyAbhaOtp}
+                        disabled={abhaBusy || abhaOtp.length !== 6}
+                        className="flex-1 py-2 rounded-xl bg-forest-green text-white text-[11px] font-bold disabled:opacity-50"
+                      >
+                        {abhaBusy ? 'Confirming Enrolment…' : 'Confirm & Create ABHA'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAbhaStep('input')
+                          setAbhaOtp('')
+                          setAbhaError('')
+                          setAbhaInfo('')
+                        }}
+                        className="px-3 py-2 rounded-xl border border-stone-200 text-[11px] font-semibold text-stone-600 hover:bg-stone-50"
+                      >
+                        Back
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
                     <div>
                       <label className="block text-xs font-semibold text-stone-800 mb-1">
-                        Aadhaar Number
+                        12-Digit Aadhaar Number
                       </label>
                       <div className="relative">
                         <IdentificationIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
@@ -597,9 +836,10 @@ export default function Signup() {
                         />
                       </div>
                       <p className="text-[10px] text-[#5A6D62] mt-1">
-                        Used only to request the Aadhaar OTP from ABDM. It is not stored by ClinicOps.
+                        Encrypted and forwarded directly to ABDM to request OTP. Never stored on ClinicOps servers.
                       </p>
                     </div>
+
                     <label className="flex items-start gap-2 p-2.5 rounded-xl bg-[#F7FAF7] border border-[#E2ECE4] cursor-pointer">
                       <input
                         type="checkbox"
@@ -608,70 +848,21 @@ export default function Signup() {
                         className="mt-0.5 w-3.5 h-3.5 rounded text-forest-green border-gray-300"
                       />
                       <span className="text-[10px] text-stone-700 leading-relaxed">
-                        I consent to my Aadhaar details being shared with ABDM to create an ABHA number.
+                        I hereby declare voluntary consent to share my Aadhaar number with the National Health Authority (ABDM) for generating my Ayushman Bharat Health Account (ABHA).
                       </span>
                     </label>
-                  </>
-                )}
 
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={requestAbhaOtp}
-                    disabled={abhaBusy}
-                    className="flex-1 py-2 rounded-xl bg-forest-green text-white text-[11px] font-bold disabled:opacity-50"
-                  >
-                    {abhaBusy ? 'Requesting OTP…' : 'Send ABDM OTP'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={resetAbhaFlow}
-                    className="px-3 py-2 rounded-xl border border-stone-200 text-[11px] font-semibold text-stone-600"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-[11px] text-stone-700">
-                  Enter the 6-digit OTP sent by ABDM to <strong>{maskedAbha}</strong>.
-                </p>
-                <div className="relative">
-                  <ShieldCheckIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={6}
-                    value={abhaOtp}
-                    onChange={(e) => setAbhaOtp(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-                    placeholder="••••••"
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] font-mono tracking-[0.4em] text-sm text-stone-800 focus:outline-hidden focus:border-forest-green focus:bg-white"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={verifyAbhaOtp}
-                    disabled={abhaBusy}
-                    className="flex-1 py-2 rounded-xl bg-forest-green text-white text-[11px] font-bold disabled:opacity-50"
-                  >
-                    {abhaBusy ? 'Verifying with ABDM…' : 'Verify with ABDM'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAbhaStep('input')
-                      setAbhaOtp('')
-                      setAbhaError('')
-                      setAbhaInfo('')
-                    }}
-                    className="px-3 py-2 rounded-xl border border-stone-200 text-[11px] font-semibold text-stone-600"
-                  >
-                    Back
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      onClick={requestAbhaOtp}
+                      disabled={abhaBusy || aadhaarNumber.length !== 12 || !abhaConsent}
+                      className="w-full py-2.5 rounded-xl bg-forest-green text-white text-[11px] font-bold hover:bg-forest-green/90 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                    >
+                      <ShieldCheckIcon className="w-3.5 h-3.5" />
+                      {abhaBusy ? 'Requesting Aadhaar OTP…' : 'Send ABDM Aadhaar OTP'}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

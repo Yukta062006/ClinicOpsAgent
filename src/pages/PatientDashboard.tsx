@@ -13,9 +13,11 @@ import {
   ArrowRightIcon,
   CheckCircleIcon,
   ArrowTopRightOnSquareIcon,
-  IdentificationIcon
+  IdentificationIcon,
+  ShieldCheckIcon
 } from '@heroicons/react/24/outline'
 import { useData, Appointment } from '../context/DataContext'
+import { apiAbha, AbhaStatus } from '../utils/api'
 
 export default function PatientDashboard() {
   const navigate = useNavigate()
@@ -30,8 +32,105 @@ export default function PatientDashboard() {
     cancelAppointment,
     consultations,
     getNextSequentialToken,
-    userPoints
+    userPoints,
+    updatePatient
   } = useData()
+
+  // ABHA Linking modal state for existing patient linking ABHA later
+  const [isLinkAbhaOpen, setIsLinkAbhaOpen] = useState(false)
+  const [linkAbhaNumber, setLinkAbhaNumber] = useState('')
+  const [linkAbhaOtp, setLinkAbhaOtp] = useState('')
+  const [linkAbhaChallengeId, setLinkAbhaChallengeId] = useState('')
+  const [linkMaskedAbha, setLinkMaskedAbha] = useState('')
+  const [linkAbhaStep, setLinkAbhaStep] = useState<'input' | 'otp' | 'success'>('input')
+  const [linkAbhaStatus, setLinkAbhaStatus] = useState<AbhaStatus | null>(null)
+  const [linkAbhaBusy, setLinkAbhaBusy] = useState(false)
+  const [linkAbhaError, setLinkAbhaError] = useState('')
+  const [linkAbhaSuccessMsg, setLinkAbhaSuccessMsg] = useState('')
+
+  useEffect(() => {
+    let isCancelled = false
+    apiAbha.status().then((res) => {
+      if (!isCancelled && res.success && res.data) {
+        setLinkAbhaStatus(res.data)
+      }
+    }).catch(() => {})
+    return () => { isCancelled = true }
+  }, [])
+
+  const formatAbhaInput = (val: string) => {
+    const raw = val.replace(/[^0-9]/g, '').slice(0, 14)
+    let formatted = ''
+    if (raw.length > 0) formatted += raw.slice(0, 2)
+    if (raw.length > 2) formatted += '-' + raw.slice(2, 6)
+    if (raw.length > 6) formatted += '-' + raw.slice(6, 10)
+    if (raw.length > 10) formatted += '-' + raw.slice(10, 14)
+    return formatted || raw
+  }
+
+  const handleRequestLinkOtp = async () => {
+    setLinkAbhaError('')
+    const clean = linkAbhaNumber.replace(/[^0-9]/g, '')
+    if (clean.length !== 14) {
+      setLinkAbhaError('Please enter a valid 14-digit ABHA number (format: XX-XXXX-XXXX-XXXX).')
+      return
+    }
+
+    if (linkAbhaStatus && !linkAbhaStatus.configured) {
+      setLinkAbhaError(
+        `ABDM verification is currently unavailable on this server. Missing credentials: ${linkAbhaStatus.missing.join(', ')}.`
+      )
+      return
+    }
+
+    setLinkAbhaBusy(true)
+    try {
+      const token = localStorage.getItem('clinicops_token') || ''
+      const res = await apiAbha.requestLinkOtp(token, linkAbhaNumber.trim())
+      if (!res.success || !res.data) {
+        setLinkAbhaError(res.error || 'Failed to request OTP from ABDM.')
+        return
+      }
+      setLinkAbhaChallengeId(res.data.challengeId)
+      setLinkMaskedAbha(res.data.maskedAbha || linkAbhaNumber.trim())
+      setLinkAbhaStep('otp')
+    } catch (err: any) {
+      setLinkAbhaError(err?.message || 'Error communicating with ABDM service.')
+    } finally {
+      setLinkAbhaBusy(false)
+    }
+  }
+
+  const handleVerifyLinkOtp = async () => {
+    setLinkAbhaError('')
+    if (!/^\d{6}$/.test(linkAbhaOtp.trim())) {
+      setLinkAbhaError('Please enter the 6-digit OTP sent by ABDM.')
+      return
+    }
+
+    setLinkAbhaBusy(true)
+    try {
+      const token = localStorage.getItem('clinicops_token') || ''
+      const res = await apiAbha.verifyLinkOtp(token, linkAbhaChallengeId, linkAbhaOtp.trim())
+      if (!res.success || !res.data) {
+        setLinkAbhaError(res.error || 'ABDM rejected this OTP. Please try again.')
+        return
+      }
+
+      const verifiedMasked = res.data.abha?.masked || linkAbhaNumber.trim()
+      updatePatient({
+        ...currentPatient,
+        abhaId: verifiedMasked,
+        abhaVerified: true,
+      })
+      setLinkAbhaStep('success')
+      setLinkAbhaSuccessMsg('ABHA account verified and linked to your ClinicOps patient profile!')
+    } catch (err: any) {
+      setLinkAbhaError(err?.message || 'Error verifying OTP.')
+    } finally {
+      setLinkAbhaBusy(false)
+    }
+  }
 
   // Modals state
   const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null)
@@ -734,9 +833,23 @@ export default function PatientDashboard() {
                   <div>
                     <span className="text-[#829489] block">ABHA Number</span>
                     <span className="font-mono font-bold text-[#1E2D25]">{currentPatient.abhaId || 'Not provided'}</span>
-                    <span className={`block text-[10px] mt-0.5 ${currentPatient.abhaVerified ? 'text-emerald-700' : 'text-[#829489]'}`}>
-                      {currentPatient.abhaVerified ? 'Verified with ABDM' : 'Not verified'}
+                    <span className={`block text-[10px] mt-0.5 font-bold ${currentPatient.abhaVerified ? 'text-emerald-700' : 'text-amber-800'}`}>
+                      {currentPatient.abhaVerified ? '✓ Verified with ABDM' : (currentPatient.abhaId ? '⚠ Not verified' : '⚪ Not linked')}
                     </span>
+                    {!currentPatient.abhaVerified && (
+                      <button
+                        onClick={() => {
+                          setLinkAbhaNumber(currentPatient.abhaId || '')
+                          setLinkAbhaStep('input')
+                          setLinkAbhaError('')
+                          setLinkAbhaSuccessMsg('')
+                          setIsLinkAbhaOpen(true)
+                        }}
+                        className="mt-1 text-[11px] font-bold text-forest-green underline hover:text-emerald-700 block cursor-pointer"
+                      >
+                        {currentPatient.abhaId ? 'Verify with ABDM OTP' : '+ Link ABHA Account'}
+                      </button>
+                    )}
                   </div>
                   <div>
                     <span className="text-[#829489] block">Aadhaar (Masked)</span>
@@ -836,6 +949,147 @@ export default function PatientDashboard() {
                   </button>
                 </div>
               </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Link / Verify ABHA Modal */}
+      {isLinkAbhaOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl border border-[#E2ECE4] w-full max-w-md p-6">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E2ECE4] mb-4">
+              <div className="flex items-center gap-2">
+                <ShieldCheckIcon className="w-5 h-5 text-forest-green" />
+                <div>
+                  <h3 className="font-serif font-bold text-base text-[#1B3E2F]">Link & Verify ABHA</h3>
+                  <p className="text-[11px] text-[#5A6D62]">National Digital Health Mission (ABDM)</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsLinkAbhaOpen(false)
+                  setLinkAbhaStep('input')
+                  setLinkAbhaError('')
+                }}
+                className="cursor-pointer"
+              >
+                <XMarkIcon className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+
+            {linkAbhaStep === 'success' ? (
+              <div className="py-6 text-center space-y-3">
+                <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center mx-auto">
+                  <CheckCircleIcon className="w-6 h-6 text-emerald-700" />
+                </div>
+                <h4 className="font-serif font-bold text-base text-[#1B3E2F]">ABHA Verified & Linked</h4>
+                <p className="text-xs text-[#5A6D62] leading-relaxed">
+                  {linkAbhaSuccessMsg || 'Your ABHA identity has been verified via ABDM and linked to your patient profile.'}
+                </p>
+                <button
+                  onClick={() => setIsLinkAbhaOpen(false)}
+                  className="w-full py-2.5 bg-forest-green text-white rounded-xl text-xs font-bold hover:bg-forest-green/90"
+                >
+                  Done
+                </button>
+              </div>
+            ) : linkAbhaStep === 'otp' ? (
+              <div className="space-y-4">
+                <div className="p-3 bg-[#EFF5EE] rounded-xl border border-[#E2ECE4]">
+                  <p className="text-xs font-bold text-forest-green">OTP Verification</p>
+                  <p className="text-[11px] text-[#5A6D62] mt-0.5">
+                    ABDM sent a 6-digit OTP to the mobile registered against <strong>{linkMaskedAbha}</strong>.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-800 mb-1">Enter 6-Digit OTP</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={linkAbhaOtp}
+                    onChange={(e) => setLinkAbhaOtp(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                    placeholder="••••••"
+                    className="w-full px-4 py-2.5 rounded-xl border border-stone-200 font-mono tracking-[0.4em] text-sm text-stone-800 text-center focus:outline-hidden focus:border-forest-green"
+                  />
+                </div>
+
+                {linkAbhaError && (
+                  <p className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2.5">
+                    {linkAbhaError}
+                  </p>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleVerifyLinkOtp}
+                    disabled={linkAbhaBusy || linkAbhaOtp.length !== 6}
+                    className="flex-1 py-2.5 bg-forest-green text-white rounded-xl text-xs font-bold hover:bg-forest-green/90 disabled:opacity-50"
+                  >
+                    {linkAbhaBusy ? 'Verifying OTP…' : 'Verify & Link ABHA'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setLinkAbhaStep('input')
+                      setLinkAbhaOtp('')
+                      setLinkAbhaError('')
+                    }}
+                    className="px-4 py-2.5 border border-stone-200 text-stone-600 rounded-xl text-xs font-semibold hover:bg-stone-50"
+                  >
+                    Back
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {linkAbhaStatus && !linkAbhaStatus.configured && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 leading-relaxed">
+                    <p className="font-bold mb-0.5">ABDM Verification Unavailable</p>
+                    <p>
+                      This server is missing credentials (<span className="font-mono">{linkAbhaStatus.missing.join(', ')}</span>). Linking via ABDM OTP requires a configured ABDM connection.
+                    </p>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-800 mb-1">14-Digit ABHA Number</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={linkAbhaNumber}
+                    onChange={(e) => setLinkAbhaNumber(formatAbhaInput(e.target.value))}
+                    placeholder="XX-XXXX-XXXX-XXXX"
+                    className="w-full px-3 py-2.5 rounded-xl border border-stone-200 font-mono text-xs text-stone-800 focus:outline-hidden focus:border-forest-green"
+                  />
+                  <p className="text-[10px] text-[#5A6D62] mt-1">
+                    ABDM will send an Aadhaar OTP to your registered phone to confirm ownership.
+                  </p>
+                </div>
+
+                {linkAbhaError && (
+                  <p className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2.5">
+                    {linkAbhaError}
+                  </p>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleRequestLinkOtp}
+                    disabled={linkAbhaBusy || linkAbhaNumber.replace(/[^0-9]/g, '').length !== 14 || (linkAbhaStatus?.configured === false)}
+                    className="flex-1 py-2.5 bg-forest-green text-white rounded-xl text-xs font-bold hover:bg-forest-green/90 disabled:opacity-50"
+                  >
+                    {linkAbhaBusy ? 'Requesting OTP…' : 'Send ABDM OTP'}
+                  </button>
+                  <button
+                    onClick={() => setIsLinkAbhaOpen(false)}
+                    className="px-4 py-2.5 border border-stone-200 text-stone-600 rounded-xl text-xs font-semibold hover:bg-stone-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>
