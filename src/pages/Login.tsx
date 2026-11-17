@@ -428,9 +428,32 @@ export default function Login() {
                   <div className="p-3 rounded-xl bg-[#EFF5EE] border border-[#E2ECE4] text-xs">
                     <p className="font-bold text-[#1B3E2F]">Verify the OTP sent by ABDM</p>
                     <p className="text-[11px] text-[#5A6D62] mt-0.5 leading-relaxed">
-                      Requested for <span className="font-mono font-bold">{maskedAbha}</span>. The code is
-                      sent to the mobile number registered against this ABHA&apos;s Aadhaar.
+                      Requested for <span className="font-mono font-bold">{maskedAbha}</span>.
                     </p>
+                    {abhaStatus?.environment === 'sandbox' ? (
+                      <div className="mt-2 p-2.5 rounded-lg bg-emerald-100/80 border border-emerald-300 text-emerald-950 text-[11px] leading-relaxed space-y-1">
+                        <p className="font-bold flex items-center gap-1.5 text-emerald-900">
+                          <span>📱 Sandbox Mode Active</span>
+                        </p>
+                        <p>
+                          No physical SMS is sent to your phone in sandbox testing. Please enter test OTP:
+                        </p>
+                        <div className="pt-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setAbhaOtp('123456')}
+                            className="font-mono font-bold text-xs bg-white px-2 py-1 rounded-md border border-emerald-400 text-emerald-800 hover:bg-emerald-50 shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+                          >
+                            <span>123456</span>
+                            <span className="text-[10px] font-sans text-emerald-600 font-normal">(click to autofill)</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-[#5A6D62] mt-0.5 leading-relaxed">
+                        The code is sent to the mobile number registered against this ABHA&apos;s Aadhaar.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-stone-800 mb-1.5">

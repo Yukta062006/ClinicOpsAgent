@@ -621,6 +621,24 @@ export default function Signup() {
                     <p className="text-[11px] text-stone-700">
                       Enter the 6-digit OTP sent by ABDM to <strong>{maskedAbha}</strong>.
                     </p>
+                    {abhaStatus?.environment === 'sandbox' && (
+                      <div className="p-2.5 rounded-lg bg-emerald-100/80 border border-emerald-300 text-emerald-950 text-[11px] leading-relaxed space-y-1">
+                        <p className="font-bold text-emerald-900">📱 Sandbox Mode Active</p>
+                        <p>
+                          No physical SMS is sent in sandbox mode. Use test verification code:
+                        </p>
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => setAbhaOtp('123456')}
+                            className="font-mono font-bold text-xs bg-white px-2 py-1 rounded-md border border-emerald-400 text-emerald-800 hover:bg-emerald-50 shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+                          >
+                            <span>123456</span>
+                            <span className="text-[10px] font-sans text-emerald-600 font-normal">(click to autofill)</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     <div className="relative">
                       <ShieldCheckIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
                       <input

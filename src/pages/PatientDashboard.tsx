@@ -1093,7 +1093,16 @@ export default function PatientDashboard() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-stone-800 mb-1">Enter 6-Digit OTP</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-stone-800">Enter 6-Digit OTP</label>
+                    <button
+                      type="button"
+                      onClick={() => setLinkAbhaOtp('123456')}
+                      className="text-[10px] text-forest-green font-bold hover:underline"
+                    >
+                      Autofill test OTP (123456)
+                    </button>
+                  </div>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -1103,6 +1112,9 @@ export default function PatientDashboard() {
                     placeholder="••••••"
                     className="w-full px-4 py-2.5 rounded-xl border border-stone-200 font-mono tracking-[0.4em] text-sm text-stone-800 text-center focus:outline-hidden focus:border-forest-green"
                   />
+                  <p className="text-[10px] text-emerald-800 font-semibold mt-1">
+                    📱 Sandbox mode active: no SMS is sent to physical phone. Use OTP 123456.
+                  </p>
                 </div>
 
                 {linkAbhaError && (
