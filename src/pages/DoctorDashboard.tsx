@@ -91,7 +91,6 @@ export default function DoctorDashboard() {
     age: 34,
     gender: 'Female',
     phone: '+91 98201 45890',
-    abhaId: '91-4523-8890-1234',
     allergies: ['No allergies recorded'],
     medicalHistory: ['Type 2 Diabetes (2023)', 'Mild Hypertension']
   }
@@ -679,8 +678,10 @@ export default function DoctorDashboard() {
               <div className="space-y-3 text-xs">
                 <div className="p-3 rounded-lg bg-[#FAFBF9] border border-pale-sage">
                   <div className="font-semibold text-forest-green mb-1">ABHA Health Profile (India)</div>
-                  <div className="text-text-secondary">ABHA ID: 91-4523-8890-1234</div>
-                  <div className="text-text-secondary">ABHA Address: maya.patel@abdm</div>
+                  <div className="text-text-secondary">ABHA ID: {showRecordModal.abhaId || 'Not provided'}</div>
+                  <div className="text-text-secondary">
+                    Verification: {showRecordModal.abhaVerified ? 'Verified with ABDM' : 'Not verified'}
+                  </div>
                 </div>
 
                 <div>
@@ -741,7 +742,7 @@ export default function DoctorDashboard() {
               <div className="space-y-3 text-xs text-stone-700">
                 <div className="p-3 rounded-lg bg-[#FAFBF9] border border-pale-sage space-y-1">
                   <div><strong>Check-in Time:</strong> 09:35 AM</div>
-                  <div><strong>Verified ID:</strong> Aadhaar verified (biometric / OTP)</div>
+                  <div><strong>Verified ID:</strong> Self-declared at check-in — no ABDM verification is recorded for this visit</div>
                   <div><strong>Primary Concern:</strong> Routine prescription refill and checkup</div>
                   <div><strong>Pain Score:</strong> 0 / 10</div>
                   <div><strong>Mobility:</strong> Ambulatory, no assistance needed</div>

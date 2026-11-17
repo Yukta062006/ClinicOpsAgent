@@ -18,6 +18,12 @@
   --color-light-green: #EFF5EE;
   --color-accent-amber: #D97706;
   --color-accent-emerald: #10B981;
+
+  --shadow-card: 0 2px 8px rgba(40, 86, 64, 0.08);
+  --shadow-card-hover: 0 4px 12px rgba(40, 86, 64, 0.12);
+  --spacing-128: 32rem;
+  --spacing-144: 36rem;
+  --radius-4xl: 2rem;
 }
 
 @layer base {

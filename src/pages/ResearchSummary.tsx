@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { 
   SpeakerWaveIcon, 
+  SpeakerXMarkIcon,
   ArrowDownTrayIcon, 
   ShareIcon,
   BookmarkIcon,
@@ -20,6 +21,8 @@ import {
 } from '@heroicons/react/24/outline'
 import { BookmarkIcon as BookmarkSolidIcon } from '@heroicons/react/24/solid'
 import { useData, ResearchArticle } from '../context/DataContext'
+import { apiTts } from '../utils/api'
+import { getFemaleSpeechVoice } from '../utils/speechAnnouncer'
 
 const fallbackArticle: ResearchArticle = {
   id: '1',
@@ -84,16 +87,22 @@ export default function ResearchSummary() {
   // Tabs: 'summary' | 'source' | 'notes'
   const [activeTab, setActiveTab] = useState<'summary' | 'source' | 'notes'>('summary')
 
-  // Language state: 'en' | 'hi' | 'mr'
-  const [selectedLanguage, setSelectedLanguage] = useState<'en' | 'hi' | 'mr'>('en')
+  // Language state: 'en' | 'hi' | 'mr' | 'bn'
+  const [selectedLanguage, setSelectedLanguage] = useState<'en' | 'hi' | 'mr' | 'bn'>('en')
   
-  // Audio playback state
+  // Audio playback & Neural TTS state
   const [audioStatus, setAudioStatus] = useState<'idle' | 'playing' | 'paused'>('idle')
+  const [speechSpeed, setSpeechSpeed] = useState<number>(1.0)
+  const [volume, setVolume] = useState<number>(0.85)
+  const [isMuted, setIsMuted] = useState<boolean>(false)
+  const [isLoadingAudio, setIsLoadingAudio] = useState<boolean>(false)
+  const [activeEngine, setActiveEngine] = useState<string>('Project Vaani (DhVaani-0.5)')
   const [currentVoiceName, setCurrentVoiceName] = useState<string>('Detecting Natural Female Voice...')
   const [shareSuccess, setShareSuccess] = useState(false)
   const [userNote, setUserNote] = useState<string>(() => localStorage.getItem(`clinicops_note_${safeArticle.id}`) || '')
   const [noteSaved, setNoteSaved] = useState(false)
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
+  const audioElementRef = useRef<HTMLAudioElement | null>(null)
 
   const isSaved = (savedResearch || []).includes(safeArticle.id)
 
@@ -176,63 +185,66 @@ export default function ResearchSummary() {
         'हृदयविकाराचा धोका कमी करण्यासाठी ही आहार पद्धती जगभरात मान्यताप्राप्त ठरली आहे.'
       ],
       quoteText: 'आजचे आरोग्य शिक्षण, उद्याचे दीर्घायुषी भविष्य.'
+    },
+    bn: {
+      summaryTitle: 'সহজ ভাষার সারসংক্ষেপ (বাংলা)',
+      bigPictureTitle: 'সামগ্রিক খাদ্যভ্যাস এবং রক্তচাপ নিয়ন্ত্রণ।',
+      bigPictureSub: 'ক্লিনিকাল ট্রায়ালের প্রমাণ-ভিত্তিক পর্যালোচনা — আপনার স্বাস্থ্যের প্রেক্ষাপটে।',
+      callout: 'এটি একটি শিক্ষামূলক স্বাস্থ্য সারসংক্ষেপ, কোনো ব্যক্তিগত চিকিৎসা পরামর্শ নয়। যেকোনো খাদ্য বা চিকিৎসার পরিবর্তনের জন্য সর্বদা আপনার চিকিৎসকের পরামর্শ নিন।',
+      q1Title: '০১ গবেষণার মূল প্রশ্ন',
+      q1Text: 'সুষম ও পুষ্টিকর খাদ্যভ্যাসের মাধ্যমে ওষুধ বা অতিরিক্ত লবণ বর্জন ছাড়াই কি উচ্চ রক্তচাপ নিয়ন্ত্রণ করা সম্ভব?',
+      q2Title: '০২ গবেষণায় কী খতিয়ে দেখা হয়েছে',
+      q2Control: 'সাধারণ দৈনন্দিন খাদ্যভ্যাস, যা তুলনামূলক পর্যালোচনার জন্য নিয়ন্ত্রণ হিসেবে ব্যবহৃত হয়েছিল।',
+      q2Fruits: 'টাটকা ফলমূল ও শাকসবজি সমৃদ্ধ খাদ্যভ্যাস, যাতে প্রচুর পটাশিয়াম ও খাদ্য আঁশ রয়েছে।',
+      q2Combo: 'ড্যাশ (DASH) সম্মিলিত খাদ্যভ্যাস: ফলমূল, সবুজ শাকসবজি, কম চর্বিযুক্ত দুগ্ধজাত খাদ্য এবং কম স্যাচুরেটেড ফ্যাট।',
+      q3Title: '০৩ ফলাফল ও ক্লিনিকাল গুরুত্ব',
+      q3Text: 'সম্মিলিত খাদ্যভ্যাস মাত্র দুই সপ্তাহের মধ্যে সিস্টোলিক ও ডায়াস্টোলিক রক্তচাপে অত্যন্ত লক্ষণীয় ও টেকসই হ্রাস নিশ্চিত করেছে।',
+      q4Title: '০৪ গবেষণার সীমাবদ্ধতা',
+      q4Text: [
+        'খাবার একটি নিয়ন্ত্রিত ট্রায়াল পরিবেশে সরবরাহ করা হয়েছিল; বাস্তব জীবনে এটি টেকসই অভ্যাসে রূপান্তর করা প্রয়োজন।',
+        'অংশগ্রহণকারীদের শারীরিক ওজন স্থির রাখা হয়েছিল যাতে পরিবর্তন শুধুমাত্র খাদ্যের গুণমানের কারণে হয়।'
+      ],
+      findingsTitle: 'মূল ক্লিনিকাল ফলাফল',
+      findings: [
+        'ড্যাশ সম্মিলিত খাদ্যভ্যাস গ্রহণের ১৪ দিনের মধ্যেই রক্তচাপ লক্ষণীয়ভাবে কমে আসে।',
+        'উচ্চ রক্তচাপে ভোগা রোগীদের ক্ষেত্রে সিস্টোলিক রক্তচাপে সর্বোচ্চ ১১.৪ mmHg পর্যন্ত হ্রাস লক্ষ্য করা গেছে।',
+        'এই ফলাফল বিভিন্ন বয়সের প্রাপ্তবয়স্কদের মধ্যে নির্ভরযোগ্য ও সুনির্দিষ্ট প্রমাণিত হয়েছে।'
+      ],
+      quoteText: 'আজকের সঠিক জ্ঞান, আগামীকালের সুস্থ জীবন।'
     }
   }
 
   const currentContent = translations[selectedLanguage] || translations.en
 
-  // Helper function to pick a natural, soft, professional female voice
-  const getFemaleVoice = (lang: 'en' | 'hi' | 'mr'): SpeechSynthesisVoice | null => {
-    if (!('speechSynthesis' in window)) return null
-    const voices = window.speechSynthesis.getVoices()
-    if (!voices || voices.length === 0) return null
-
-    const isFemale = (v: SpeechSynthesisVoice) => {
-      const lower = (v.name + ' ' + (v as any).voiceURI || '').toLowerCase()
-      // Reject explicit male identifiers
-      if (lower.includes('male') && !lower.includes('female')) return false
-      if (lower.includes('rishi') || lower.includes('david') || lower.includes('mark') || 
-          lower.includes('george') || lower.includes('james') || lower.includes('guy') || 
-          lower.includes('stefan') || lower.includes('daniel')) {
-        return false
-      }
-      // Prefer explicit female identifiers
-      if (lower.includes('female') || lower.includes('zira') || lower.includes('heera') || 
-          lower.includes('neerja') || lower.includes('veena') || lower.includes('swara') || 
-          lower.includes('kalpana') || lower.includes('jenny') || lower.includes('samantha') || 
-          lower.includes('victoria') || lower.includes('karen') || lower.includes('priya') || 
-          lower.includes('sonia') || lower.includes('shree')) {
-        return true
-      }
-      return true // Neutral fallback
-    }
-
-    if (lang === 'hi') {
-      const hiFemale = voices.find(v => (v.lang === 'hi-IN' || v.lang.startsWith('hi')) && isFemale(v))
-      if (hiFemale) return hiFemale
-      const anyHi = voices.find(v => v.lang === 'hi-IN' || v.lang.startsWith('hi'))
-      if (anyHi) return anyHi
-    }
-
-    if (lang === 'mr') {
-      const mrFemale = voices.find(v => (v.lang === 'mr-IN' || v.lang.startsWith('mr')) && isFemale(v))
-      if (mrFemale) return mrFemale
-      const anyMr = voices.find(v => v.lang === 'mr-IN' || v.lang.startsWith('mr'))
-      if (anyMr) return anyMr
-      // Fallback to Hindi female voice for Indian Devanagari pronunciation
-      const hiFemale = voices.find(v => (v.lang === 'hi-IN' || v.lang.startsWith('hi')) && isFemale(v))
-      if (hiFemale) return hiFemale
-    }
-
-    // English: Prioritize Indian English Female voice (e.g. Heera, Neerja, Veena), then natural English female
-    const inFemale = voices.find(v => (v.lang === 'en-IN' || v.name.toLowerCase().includes('india')) && isFemale(v))
-    if (inFemale) return inFemale
-
-    const enFemale = voices.find(v => v.lang.startsWith('en') && isFemale(v))
-    if (enFemale) return enFemale
-
-    return voices[0] || null
+  // Pick a natural, soft, professional female voice using unified speechAnnouncer
+  const getFemaleVoice = (lang: 'en' | 'hi' | 'mr' | 'bn'): SpeechSynthesisVoice | null => {
+    return getFemaleSpeechVoice(lang)
   }
+
+  // Query TTS service health/status on mount
+  useEffect(() => {
+    let isMounted = true
+    apiTts.getStatus().then((res) => {
+      if (!isMounted) return
+      if (res.success && res.data) {
+        if (res.data.vaani?.isOnline && res.data.vaani?.isModelLoaded) {
+          setActiveEngine('Project Vaani (DhVaani-0.5)')
+        } else if (res.data.sarvam?.isConfigured) {
+          setActiveEngine('Sarvam AI (Neural Fallback)')
+        } else {
+          setActiveEngine('Web Speech (Local Fallback)')
+        }
+      }
+    }).catch(() => {
+      if (isMounted) setActiveEngine('Web Speech (Local Fallback)')
+    })
+    return () => { isMounted = false }
+  }, [])
+
+  // Stop audio when safeArticle changes
+  useEffect(() => {
+    stopAllAudio()
+  }, [safeArticle.id])
 
   // Voice detection on mount and language change
   useEffect(() => {
@@ -251,65 +263,168 @@ export default function ResearchSummary() {
     }
 
     return () => {
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel()
-      }
+      stopAllAudio()
     }
   }, [selectedLanguage])
 
-  // Functional Play Audio
-  const handlePlayAudio = () => {
+  // Cleanly stops all active audio playback (both HTMLAudioElement and speechSynthesis)
+  const stopAllAudio = () => {
+    if (audioElementRef.current) {
+      audioElementRef.current.pause()
+      audioElementRef.current.currentTime = 0
+      audioElementRef.current = null
+    }
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel()
+    }
+    setAudioStatus('idle')
+    setIsLoadingAudio(false)
+  }
+
+  // Play audio via Browser Web Speech API fallback
+  const playWebSpeechFallback = (textToRead: string) => {
     if (!('speechSynthesis' in window)) {
       alert('Speech synthesis is not supported on your browser.')
+      setIsLoadingAudio(false)
+      setAudioStatus('idle')
       return
     }
 
+    try {
+      window.speechSynthesis.cancel()
+      const utterance = new SpeechSynthesisUtterance(textToRead)
+      utteranceRef.current = utterance
+
+      if (selectedLanguage === 'hi') utterance.lang = 'hi-IN'
+      else if (selectedLanguage === 'mr') utterance.lang = 'mr-IN'
+      else if (selectedLanguage === 'bn') utterance.lang = 'bn-IN'
+      else utterance.lang = 'en-IN'
+
+      const femaleVoice = getFemaleVoice(selectedLanguage)
+      if (femaleVoice) {
+        utterance.voice = femaleVoice
+        if (femaleVoice.lang) {
+          utterance.lang = femaleVoice.lang
+        }
+      }
+
+      // Smooth, natural reading cadence with natural vocal pitch
+      const isHi = selectedLanguage === 'hi'
+      const isMr = selectedLanguage === 'mr'
+      const isBn = selectedLanguage === 'bn'
+      const rateMultiplier = isHi ? 0.98 : (isMr ? 0.96 : (isBn ? 0.95 : 0.92))
+      utterance.rate = Math.max(0.75, Math.min(speechSpeed * rateMultiplier, 1.25))
+      utterance.pitch = 1.0
+      utterance.volume = isMuted ? 0 : volume
+
+      utterance.onstart = () => {
+        setIsLoadingAudio(false)
+        setAudioStatus('playing')
+      }
+      utterance.onend = () => {
+        setIsLoadingAudio(false)
+        setAudioStatus('idle')
+      }
+      utterance.onerror = () => {
+        setIsLoadingAudio(false)
+        setAudioStatus('idle')
+      }
+
+      window.speechSynthesis.speak(utterance)
+    } catch (e) {
+      console.error('Web Speech fallback error:', e)
+      setIsLoadingAudio(false)
+      setAudioStatus('idle')
+    }
+  }
+
+  // Functional Play Audio - checks Project Vaani / Sarvam backend first, falls back to Web Speech
+  const handlePlayAudio = async () => {
+    // If paused, resume existing audio
     if (audioStatus === 'paused') {
-      window.speechSynthesis.resume()
-      setAudioStatus('playing')
-      return
+      if (audioElementRef.current && audioElementRef.current.paused) {
+        audioElementRef.current.play()
+        setAudioStatus('playing')
+        return
+      }
+      if ('speechSynthesis' in window && window.speechSynthesis.paused) {
+        window.speechSynthesis.resume()
+        setAudioStatus('playing')
+        return
+      }
     }
 
-    window.speechSynthesis.cancel()
+    // Stop previous audio to avoid duplicate playback
+    stopAllAudio()
+    setIsLoadingAudio(true)
 
-    // Build the narrative text purely in the selected language
+    // Build the narrative text purely in the selected language using pre-translated content
     let textToRead = ''
     if (selectedLanguage === 'hi') {
-      textToRead = `डैश (DASH) आहार और रक्तचाप नियंत्रण अध्ययन। ${currentContent.bigPictureTitle} ${currentContent.callout} ${currentContent.q1Title}: ${currentContent.q1Text} ${currentContent.q3Title}: ${currentContent.q3Text} ${currentContent.findingsTitle}: ${currentContent.findings.join('. ')}`
+      textToRead = `डैश आहार और रक्तचाप नियंत्रण अध्ययन। ${currentContent.bigPictureTitle} ${currentContent.callout} ${currentContent.q1Title}: ${currentContent.q1Text} ${currentContent.q3Title}: ${currentContent.q3Text} ${currentContent.findingsTitle}: ${currentContent.findings.join('. ')}`
     } else if (selectedLanguage === 'mr') {
-      textToRead = `डॅश (DASH) आहार आणि रक्तदाब नियंत्रण अभ्यास। ${currentContent.bigPictureTitle} ${currentContent.callout} ${currentContent.q1Title}: ${currentContent.q1Text} ${currentContent.q3Title}: ${currentContent.q3Text} ${currentContent.findingsTitle}: ${currentContent.findings.join('. ')}`
+      textToRead = `डॅश आहार आणि रक्तदाब नियंत्रण अभ्यास। ${currentContent.bigPictureTitle} ${currentContent.callout} ${currentContent.q1Title}: ${currentContent.q1Text} ${currentContent.q3Title}: ${currentContent.q3Text} ${currentContent.findingsTitle}: ${currentContent.findings.join('. ')}`
+    } else if (selectedLanguage === 'bn') {
+      textToRead = `ড্যাশ খাদ্যভ্যাস ও রক্তচাপ নিয়ন্ত্রণ গবেষণা সারসংক্ষেপ। ${currentContent.bigPictureTitle} ${currentContent.callout} ${currentContent.q1Title}: ${currentContent.q1Text} ${currentContent.q3Title}: ${currentContent.q3Text} ${currentContent.findingsTitle}: ${currentContent.findings.join('. ')}`
     } else {
       textToRead = `${safeArticle.title}. ${currentContent.bigPictureTitle}. ${currentContent.callout}. ${currentContent.q1Title}: ${currentContent.q1Text}. ${currentContent.q3Title}: ${currentContent.q3Text}. ${currentContent.findingsTitle}: ${currentContent.findings.join('. ')}`
     }
 
-    const utterance = new SpeechSynthesisUtterance(textToRead)
-    utteranceRef.current = utterance
+    try {
+      const res = await apiTts.synthesize({
+        text: textToRead,
+        language: selectedLanguage,
+        speed: speechSpeed,
+        voiceGender: 'female',
+      })
 
-    // Language code
-    if (selectedLanguage === 'hi') utterance.lang = 'hi-IN'
-    else if (selectedLanguage === 'mr') utterance.lang = 'mr-IN'
-    else utterance.lang = 'en-IN'
+      if (res.success && res.data?.audioBase64) {
+        const engineLabel = res.data.engine === 'project-vaani-dhvaani-0.5'
+          ? 'Project Vaani (DhVaani-0.5)'
+          : res.data.engine === 'sarvam-ai-fallback'
+          ? 'Sarvam AI (Neural Fallback)'
+          : 'Neural Audio Engine'
+        setActiveEngine(engineLabel)
 
-    const femaleVoice = getFemaleVoice(selectedLanguage)
-    if (femaleVoice) {
-      utterance.voice = femaleVoice
+        const audio = new Audio(`data:${res.data.format || 'audio/wav'};base64,${res.data.audioBase64}`)
+        audio.playbackRate = speechSpeed
+        audio.volume = isMuted ? 0 : volume
+        audioElementRef.current = audio
+
+        audio.onplay = () => {
+          setIsLoadingAudio(false)
+          setAudioStatus('playing')
+        }
+        audio.onended = () => {
+          setAudioStatus('idle')
+          audioElementRef.current = null
+        }
+        audio.onerror = () => {
+          console.warn('Backend audio failed during playback, falling back to Web Speech')
+          audioElementRef.current = null
+          playWebSpeechFallback(textToRead)
+        }
+
+        await audio.play()
+        return
+      }
+    } catch (err) {
+      console.warn('Synthesize request error, falling back to Web Speech:', err)
     }
 
-    // Natural, clear, professional female healthcare cadence
-    utterance.rate = 0.90
-    utterance.pitch = 1.05
-    utterance.volume = 0.85
-
-    utterance.onstart = () => setAudioStatus('playing')
-    utterance.onend = () => setAudioStatus('idle')
-    utterance.onerror = () => setAudioStatus('idle')
-
-    window.speechSynthesis.speak(utterance)
+    // Seamless fallback to browser speech synthesis
+    setActiveEngine('Web Speech (Local Fallback)')
+    playWebSpeechFallback(textToRead)
   }
 
   // Functional Pause Audio
   const handlePauseAudio = () => {
-    if ('speechSynthesis' in window && audioStatus === 'playing') {
+    if (audioElementRef.current && !audioElementRef.current.paused) {
+      audioElementRef.current.pause()
+      setAudioStatus('paused')
+      return
+    }
+    if ('speechSynthesis' in window && window.speechSynthesis.speaking) {
       window.speechSynthesis.pause()
       setAudioStatus('paused')
     }
@@ -317,19 +432,51 @@ export default function ResearchSummary() {
 
   // Functional Resume Audio
   const handleResumeAudio = () => {
-    if ('speechSynthesis' in window && audioStatus === 'paused') {
+    if (audioElementRef.current && audioElementRef.current.paused) {
+      audioElementRef.current.play()
+      setAudioStatus('playing')
+      return
+    }
+    if ('speechSynthesis' in window && window.speechSynthesis.paused) {
       window.speechSynthesis.resume()
       setAudioStatus('playing')
-    } else {
-      handlePlayAudio()
+      return
     }
+    handlePlayAudio()
   }
 
   // Functional Stop Audio
   const handleStopAudio = () => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-      setAudioStatus('idle')
+    stopAllAudio()
+  }
+
+  // Dynamic Speech Speed Control (0.75x, 1.0x, 1.25x, 1.5x)
+  const handleSpeedChange = (newSpeed: number) => {
+    setSpeechSpeed(newSpeed)
+    if (audioElementRef.current) {
+      audioElementRef.current.playbackRate = newSpeed
+    }
+  }
+
+  // Dynamic Volume Control
+  const handleVolumeChange = (newVol: number) => {
+    setVolume(newVol)
+    setIsMuted(newVol === 0)
+    if (audioElementRef.current) {
+      audioElementRef.current.volume = newVol
+    }
+  }
+
+  // Mute / Unmute Toggle
+  const toggleMute = () => {
+    if (isMuted) {
+      setIsMuted(false)
+      const restoredVol = volume > 0 ? volume : 0.85
+      setVolume(restoredVol)
+      if (audioElementRef.current) audioElementRef.current.volume = restoredVol
+    } else {
+      setIsMuted(true)
+      if (audioElementRef.current) audioElementRef.current.volume = 0
     }
   }
 
@@ -474,68 +621,154 @@ export default function ResearchSummary() {
           >
             मराठी
           </button>
+          <button
+            onClick={() => {
+              handleStopAudio()
+              setSelectedLanguage('bn')
+            }}
+            className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
+              selectedLanguage === 'bn' ? 'bg-[#1B3E2F] text-white' : 'text-[#5A6D62] hover:text-[#1B3E2F]'
+            }`}
+          >
+            বাংলা
+          </button>
         </div>
       </div>
 
       {/* Natural Female AI Voice Audio Player Card */}
-      <div className="bg-[#EFF5EE] border border-[#E2ECE4] rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xs">
-        <div className="flex items-center space-x-3">
-          {audioStatus === 'playing' ? (
-            <button
-              onClick={handlePauseAudio}
-              className="flex items-center space-x-2 px-4 py-2 bg-[#1B3E2F] text-white rounded-xl text-xs font-bold hover:bg-[#143024] transition-all shadow-xs"
-              title="Pause playback"
-            >
-              <PauseIcon className="w-4 h-4" />
-              <span>Pause</span>
-            </button>
-          ) : audioStatus === 'paused' ? (
-            <button
-              onClick={handleResumeAudio}
-              className="flex items-center space-x-2 px-4 py-2 bg-[#1B3E2F] text-white rounded-xl text-xs font-bold hover:bg-[#143024] transition-all shadow-xs"
-              title="Resume playback"
-            >
-              <PlayIcon className="w-4 h-4" />
-              <span>Resume</span>
-            </button>
-          ) : (
-            <button
-              onClick={handlePlayAudio}
-              className="flex items-center space-x-2 px-4 py-2 bg-[#1B3E2F] text-white rounded-xl text-xs font-bold hover:bg-[#143024] transition-all shadow-xs"
-              title="Listen to summary"
-            >
-              <PlayIcon className="w-4 h-4" />
-              <span>Listen Aloud</span>
-            </button>
-          )}
+      <div className="bg-[#EFF5EE] border border-[#E2ECE4] rounded-2xl p-4 flex flex-col gap-3.5 shadow-2xs">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5">
+          {/* Audio Controls */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {isLoadingAudio ? (
+              <button
+                disabled
+                className="flex items-center space-x-2 px-4 py-2 bg-[#1B3E2F]/80 text-white rounded-xl text-xs font-bold cursor-wait shadow-xs"
+              >
+                <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                <span>Synthesizing...</span>
+              </button>
+            ) : audioStatus === 'playing' ? (
+              <button
+                onClick={handlePauseAudio}
+                className="flex items-center space-x-2 px-4 py-2 bg-[#1B3E2F] text-white rounded-xl text-xs font-bold hover:bg-[#143024] transition-all shadow-xs"
+                title="Pause playback"
+              >
+                <PauseIcon className="w-4 h-4" />
+                <span>Pause</span>
+              </button>
+            ) : audioStatus === 'paused' ? (
+              <button
+                onClick={handleResumeAudio}
+                className="flex items-center space-x-2 px-4 py-2 bg-[#1B3E2F] text-white rounded-xl text-xs font-bold hover:bg-[#143024] transition-all shadow-xs"
+                title="Resume playback"
+              >
+                <PlayIcon className="w-4 h-4" />
+                <span>Resume</span>
+              </button>
+            ) : (
+              <button
+                onClick={handlePlayAudio}
+                className="flex items-center space-x-2 px-4 py-2 bg-[#1B3E2F] text-white rounded-xl text-xs font-bold hover:bg-[#143024] transition-all shadow-xs"
+                title="Listen to summary"
+              >
+                <PlayIcon className="w-4 h-4" />
+                <span>Listen Aloud</span>
+              </button>
+            )}
 
-          {audioStatus !== 'idle' && (
-            <button
-              onClick={handleStopAudio}
-              className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-[#E2ECE4] text-[#5A6D62] hover:text-[#1B3E2F] rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors"
-              title="Stop and reset"
-            >
-              <StopIcon className="w-4 h-4" />
-              <span>Stop</span>
-            </button>
-          )}
+            {(audioStatus !== 'idle' || isLoadingAudio) && (
+              <button
+                onClick={handleStopAudio}
+                className="flex items-center space-x-1.5 px-3 py-2 bg-white border border-[#E2ECE4] text-[#5A6D62] hover:text-[#1B3E2F] rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors shadow-2xs"
+                title="Stop and reset"
+              >
+                <StopIcon className="w-4 h-4" />
+                <span>Stop</span>
+              </button>
+            )}
 
-          <div className="text-xs text-[#5A6D62]">
-            <span className="font-semibold text-[#1B3E2F]">Voice:</span> Natural Female Healthcare AI ({selectedLanguage.toUpperCase()})
+            {/* Speech Speed Selector Pills */}
+            <div className="flex items-center bg-white border border-[#E2ECE4] rounded-xl p-0.5 shadow-2xs">
+              {[0.75, 1.0, 1.25, 1.5].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => handleSpeedChange(s)}
+                  className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all ${
+                    speechSpeed === s
+                      ? 'bg-[#1B3E2F] text-white shadow-2xs'
+                      : 'text-[#5A6D62] hover:text-[#1B3E2F]'
+                  }`}
+                  title={`Speed ${s}x`}
+                >
+                  {s}x
+                </button>
+              ))}
+            </div>
+
+            {/* Volume Control */}
+            <div className="flex items-center space-x-1.5 bg-white border border-[#E2ECE4] rounded-xl px-2.5 py-1 shadow-2xs">
+              <button
+                onClick={toggleMute}
+                className="text-[#5A6D62] hover:text-[#1B3E2F] transition-colors"
+                title={isMuted ? 'Unmute' : 'Mute'}
+              >
+                {isMuted || volume === 0 ? (
+                  <SpeakerXMarkIcon className="w-4 h-4 text-red-500" />
+                ) : (
+                  <SpeakerWaveIcon className="w-4 h-4 text-[#1B3E2F]" />
+                )}
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={isMuted ? 0 : volume}
+                onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                className="w-16 h-1.5 bg-[#E2ECE4] accent-[#1B3E2F] rounded-lg cursor-pointer"
+                title={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
+              />
+              <span className="text-[10px] font-semibold text-[#5A6D62] w-7">
+                {Math.round((isMuted ? 0 : volume) * 100)}%
+              </span>
+            </div>
+          </div>
+
+          {/* Audio Waveform visualization */}
+          <div className="flex items-center space-x-1 self-end md:self-auto">
+            {[12, 22, 16, 28, 14, 24, 10, 26, 18, 12, 20].map((h, i) => (
+              <div
+                key={i}
+                className={`w-1 rounded-full transition-all duration-200 ${
+                  audioStatus === 'playing' ? 'bg-[#1B3E2F] animate-pulse' : 'bg-[#C2D4C6]'
+                }`}
+                style={{ height: audioStatus === 'playing' ? `${h}px` : '8px' }}
+              />
+            ))}
           </div>
         </div>
 
-        {/* Audio Waveform visualization */}
-        <div className="flex items-center space-x-1 self-end md:self-auto">
-          {[12, 22, 16, 28, 14, 24, 10, 26, 18, 12, 20].map((h, i) => (
-            <div
-              key={i}
-              className={`w-1 rounded-full transition-all duration-200 ${
-                audioStatus === 'playing' ? 'bg-[#1B3E2F] animate-pulse' : 'bg-[#C2D4C6]'
-              }`}
-              style={{ height: audioStatus === 'playing' ? `${h}px` : '8px' }}
-            />
-          ))}
+        {/* Engine, Voice and Status Indicator Bar */}
+        <div className="flex flex-wrap items-center justify-between pt-2.5 border-t border-[#E2ECE4]/80 text-xs text-[#5A6D62] gap-2">
+          <div className="flex items-center flex-wrap gap-2">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#DCE7DF] text-[#1B3E2F]">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 mr-1.5 animate-pulse" />
+              {activeEngine}
+            </span>
+            <span className="text-[#829489]">|</span>
+            <span className="text-[11px]">
+              <strong className="text-[#1B3E2F]">Voice:</strong> Clear Natural Female AI ({selectedLanguage.toUpperCase()})
+            </span>
+          </div>
+
+          <div className="text-[11px] text-[#829489]">
+            {audioStatus === 'playing'
+              ? 'Speaking healthcare research summary...'
+              : audioStatus === 'paused'
+              ? 'Playback paused'
+              : 'Ready to read aloud'}
+          </div>
         </div>
       </div>
 

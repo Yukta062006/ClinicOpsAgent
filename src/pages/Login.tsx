@@ -10,62 +10,63 @@ import {
   BuildingOffice2Icon,
   BeakerIcon,
   IdentificationIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline'
-import { apiAuth } from '../utils/api'
 import { useData } from '../context/DataContext'
+import { apiAbha, AbhaStatus } from '../utils/api'
+
+type WorkspaceRole = 'patient' | 'doctor' | 'frontdesk'
+
+function workspaceFor(role: string): { path: string; label: string } {
+  const normalized = (role || 'patient').toLowerCase().replace(/[_\s-]/g, '')
+  if (normalized.includes('doc')) return { path: '/doctor/dashboard', label: 'Doctor' }
+  if (normalized.includes('front') || normalized.includes('recept')) return { path: '/frontdesk/dashboard', label: 'Front Desk' }
+  return { path: '/patient/dashboard', label: 'Patient' }
+}
 
 export default function Login() {
-  const [selectedRole, setSelectedRole] = useState<'patient' | 'doctor' | 'frontdesk'>('patient')
+  const [selectedRole, setSelectedRole] = useState<WorkspaceRole>('patient')
   const [loginMethod, setLoginMethod] = useState<'email' | 'abha'>('email')
   
-  const [email, setEmail] = useState('patient@clinicops.com')
-  const [abhaNumber, setAbhaNumber] = useState('91-4821-7290-3412')
-  const [password, setPassword] = useState('admin123')
+  const [email, setEmail] = useState('')
+  const [abhaNumber, setAbhaNumber] = useState('')
+  const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [rememberMe, setRememberMe] = useState(true)
 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
 
-  const navigate = useNavigate()
-  const { setUser } = useData()
+  // ABHA sign-in is a two-step ABDM flow: request an Aadhaar OTP, then verify
+  // it. No ClinicOps password is involved and no session is created until
+  // ABDM confirms the OTP.
+  const [abhaStep, setAbhaStep] = useState<'identify' | 'verify'>('identify')
+  const [abhaChallengeId, setAbhaChallengeId] = useState('')
+  const [abhaOtp, setAbhaOtp] = useState('')
+  const [maskedAbha, setMaskedAbha] = useState('')
+  const [abhaStatus, setAbhaStatus] = useState<AbhaStatus | null>(null)
+  const [notLinkedAbha, setNotLinkedAbha] = useState('')
+  const [resendCooldown, setResendCooldown] = useState(0)
+  const [resendCount, setResendCount] = useState(0)
 
-  // Auto redirect if already logged in with valid token & role
   useEffect(() => {
-    const token = localStorage.getItem('clinicops_token')
-    const savedUser = localStorage.getItem('clinicops_user')
-    if (token && savedUser) {
-      try {
-        const u = JSON.parse(savedUser)
-        const role = (u.role || 'patient').toLowerCase().replace('_', '')
-        if (role.includes('doc')) navigate('/doctor-dashboard')
-        else if (role.includes('front')) navigate('/front-desk')
-        else navigate('/patient-dashboard')
-      } catch (e) {
-        navigate('/patient-dashboard')
-      }
-    }
-  }, [navigate])
+    if (resendCooldown <= 0) return
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [resendCooldown])
 
-  const completeLogin = (token: string, userObj: any) => {
-    localStorage.setItem('clinicops_token', token)
-    localStorage.setItem('clinicops_user', JSON.stringify(userObj))
-    setUser(userObj)
-    setSuccessMsg(`Welcome, ${userObj.name}! Loading ${userObj.role.toUpperCase()} Workspace...`)
-    
-    setTimeout(() => {
-      const role = (userObj.role || 'patient').toLowerCase().replace('_', '')
-      if (role.includes('doc')) {
-        navigate('/doctor-dashboard')
-      } else if (role.includes('front')) {
-        navigate('/front-desk')
-      } else {
-        navigate('/patient-dashboard')
-      }
-    }, 400)
-  }
+  const navigate = useNavigate()
+  const { signIn, requestAbhaLoginOtp, signInWithAbha, authStatus, user } = useData()
+
+  // Redirect an already-authenticated visitor to the workspace that the
+  // backend says they own. The role always comes from the server response.
+  useEffect(() => {
+    if (authStatus !== 'authenticated' || !user) return
+    navigate(workspaceFor(user.role).path, { replace: true })
+  }, [authStatus, user, navigate])
 
   const handleAbhaChange = (val: string) => {
     const raw = val.replace(/[^0-9]/g, '').slice(0, 14)
@@ -77,125 +78,163 @@ export default function Login() {
     setAbhaNumber(formatted || raw)
   }
 
+  useEffect(() => {
+    let cancelled = false
+    apiAbha.status().then((response) => {
+      if (!cancelled && response.success && response.data) setAbhaStatus(response.data)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const resetAbhaFlow = () => {
+    setAbhaStep('identify')
+    setAbhaChallengeId('')
+    setAbhaOtp('')
+    setMaskedAbha('')
+    setNotLinkedAbha('')
+    setResendCooldown(0)
+    setResendCount(0)
+    setError('')
+    setSuccessMsg('')
+  }
+
+  const handleRequestAbhaOtp = async () => {
+    setError('')
+    setSuccessMsg('')
+    setNotLinkedAbha('')
+
+    if (abhaNumber.replace(/[^0-9]/g, '').length !== 14) {
+      setError('Please enter a valid 14-digit ABHA number (format: XX-XXXX-XXXX-XXXX).')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const response = await requestAbhaLoginOtp(abhaNumber.trim())
+      if (!response.success || !response.data) {
+        setError(response.error || 'ABDM could not send an OTP for this ABHA number.')
+        return
+      }
+      setAbhaChallengeId(response.data.challengeId)
+      setMaskedAbha(response.data.maskedAbha || abhaNumber.trim())
+      setAbhaStep('verify')
+      setAbhaOtp('')
+      setResendCooldown(60)
+      setResendCount(0)
+      setSuccessMsg(response.data.message || 'An ABDM OTP was requested. Enter the 6-digit code to continue.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleResendAbhaOtp = async () => {
+    if (resendCooldown > 0 || resendCount >= 3 || !abhaChallengeId) return
+    setIsLoading(true)
+    setError('')
+    try {
+      const response = await apiAbha.resendOtp(abhaChallengeId)
+      if (response.success && response.data) {
+        setResendCooldown(60)
+        setResendCount(response.data.resendCount)
+        setSuccessMsg(response.data.message || 'A fresh OTP has been sent to your registered mobile.')
+      } else {
+        setError(response.error || 'Failed to resend OTP.')
+      }
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleVerifyAbhaOtp = async () => {
+    setError('')
+    setSuccessMsg('')
+    setNotLinkedAbha('')
+
+    if (!/^\d{6}$/.test(abhaOtp.trim())) {
+      setError('Enter the 6-digit OTP sent by ABDM.')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const result = await signInWithAbha(abhaChallengeId, abhaOtp.trim())
+      if (!result.success || !result.user) {
+        if (result.code === 'ABHA_NOT_LINKED') {
+          setNotLinkedAbha(abhaNumber.replace(/[^0-9]/g, ''))
+        }
+        setError(result.error || 'ABDM did not confirm this OTP. Please request a new code.')
+        return
+      }
+
+      const workspace = workspaceFor(result.user.role)
+      setSuccessMsg(`ABDM verified ${maskedAbha}. Opening your ${workspace.label} workspace…`)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setSuccessMsg('')
 
-    if (selectedRole === 'patient' && loginMethod === 'abha') {
-      const cleanAbha = abhaNumber.replace(/[^0-9]/g, '')
-      if (cleanAbha.length !== 14) {
-        setError('Please enter a valid 14-digit ABHA ID (format: XX-XXXX-XXXX-XXXX).')
-        return
-      }
-    } else {
-      if (!email.trim() || !email.includes('@')) {
-        setError('Please enter a valid registered email address.')
-        return
-      }
+    const isAbha = selectedRole === 'patient' && loginMethod === 'abha'
+    if (isAbha) {
+      if (abhaStep === 'identify') await handleRequestAbhaOtp()
+      else await handleVerifyAbhaOtp()
+      return
     }
 
+    if (!email.trim() || !email.includes('@')) {
+      setError('Please enter a valid registered email address.')
+      return
+    }
     if (!password.trim()) {
       setError('Please enter your account password.')
       return
     }
 
     setIsLoading(true)
-
     try {
-      const isAbha = selectedRole === 'patient' && loginMethod === 'abha'
-      const identifier = isAbha ? abhaNumber.trim() : email.trim().toLowerCase()
+      const result = await signIn(email.trim().toLowerCase(), password)
 
-      const response = await apiAuth.login(identifier, password, isAbha)
-      if (response.success && response.data) {
-        const userObj = response.data.user
-        const actualRole = (userObj.role || 'patient').toLowerCase().replace('_', '')
-        const normalizedSelected = selectedRole === 'doctor' ? 'doctor' : selectedRole === 'frontdesk' ? 'frontdesk' : 'patient'
-
-        const roleMismatch = 
-          (normalizedSelected === 'doctor' && !actualRole.includes('doc')) ||
-          (normalizedSelected === 'frontdesk' && !actualRole.includes('front') && !actualRole.includes('recept')) ||
-          (normalizedSelected === 'patient' && (actualRole.includes('doc') || actualRole.includes('front') || actualRole.includes('recept')))
-
-        if (roleMismatch) {
-          setError(`Role mismatch: This account (${userObj.email}) is registered as ${userObj.role.toUpperCase()}. You selected "${selectedRole.toUpperCase()}" workspace. Please select the correct role above.`)
-          setIsLoading(false)
-          return
-        }
-
-        completeLogin(response.data.token, userObj)
-      } else {
-        // Check local users if server request failed
-        handleLocalFallback(identifier, password, isAbha, response.error)
+      if (!result.success || !result.user) {
+        setError(result.error || 'Unable to sign in. Please try again.')
+        return
       }
-    } catch (err: any) {
-      handleLocalFallback(email.trim(), password, false, err.message)
+
+      const workspace = workspaceFor(result.user.role)
+      const requestedWorkspace = selectedRole === 'doctor' ? 'Doctor' : selectedRole === 'frontdesk' ? 'Front Desk' : 'Patient'
+
+      setSuccessMsg(
+        workspace.label === requestedWorkspace
+          ? `Welcome, ${result.user.name}! Opening your ${workspace.label} workspace…`
+          : `This account belongs to the ${workspace.label} workspace. Opening it now…`
+      )
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleLocalFallback = (identifier: string, passInput: string, isAbha: boolean, serverError?: string) => {
-    // Only accept correct credentials in development fallback
-    const idLower = identifier.toLowerCase()
-
-    if (selectedRole === 'doctor') {
-      if (!idLower.includes('doctor') && !idLower.includes('cooper') && !idLower.includes('sharma') && !idLower.includes('patil')) {
-        setError(serverError || 'Invalid doctor credentials. Please use doctor@clinicops.com or select Patient.')
-        return
-      }
-      completeLogin('token-doctor-session', {
-        id: 'u-cooper',
-        email: idLower.includes('@') ? idLower : 'doctor@clinicops.com',
-        name: 'Dr. Elena Cooper',
-        role: 'doctor',
-        specialty: 'Family Medicine',
-        department: 'Room 02'
-      })
-    } else if (selectedRole === 'frontdesk') {
-      if (!idLower.includes('front') && !idLower.includes('recept') && !idLower.includes('martin')) {
-        setError(serverError || 'Invalid front desk credentials. Please use frontdesk@clinicops.com or select Patient.')
-        return
-      }
-      completeLogin('token-frontdesk-session', {
-        id: 'u-frontdesk',
-        email: idLower.includes('@') ? idLower : 'frontdesk@clinicops.com',
-        name: 'Olivia Martin',
-        role: 'frontdesk',
-        department: 'Reception'
-      })
-    } else {
-      // Patient
-      if (idLower.includes('doctor@') || idLower.includes('frontdesk@')) {
-        setError('These credentials belong to a staff/doctor account. Please select Doctor or Front Desk above.')
-        return
-      }
-      completeLogin('token-patient-session', {
-        id: 'u-yukta',
-        email: isAbha ? 'yukta@clinicops.com' : (idLower.includes('@') ? idLower : 'patient@clinicops.com'),
-        name: 'Yukta Ravindra Thakur',
-        role: 'patient',
-        abhaId: isAbha ? identifier : '91-4821-7290-3412',
-        aadhaar: 'XXXX-XXXX-4912',
-        phone: '+91 98201 45892'
-      })
-    }
-  }
-
-  const setRolePersona = (role: 'patient' | 'doctor' | 'frontdesk') => {
+  const fillDemoAccount = (role: WorkspaceRole) => {
     setSelectedRole(role)
+    setLoginMethod('email')
     setError('')
+    resetAbhaFlow()
     if (role === 'patient') {
       setEmail('patient@clinicops.com')
-      setAbhaNumber('91-4821-7290-3412')
-      setPassword('admin123')
+      setAbhaNumber('')
     } else if (role === 'doctor') {
       setEmail('doctor@clinicops.com')
-      setPassword('admin123')
+      setAbhaNumber('')
     } else {
       setEmail('frontdesk@clinicops.com')
-      setPassword('admin123')
+      setAbhaNumber('')
     }
+    // Passwords are never pre-filled or stored in the frontend bundle.
+    setPassword('')
   }
 
   return (
@@ -243,7 +282,10 @@ export default function Login() {
           <div className="grid grid-cols-3 gap-1.5 p-1 bg-[#EFF5EE] rounded-2xl border border-[#E2ECE4]">
             <button
               type="button"
-              onClick={() => setRolePersona('patient')}
+              onClick={() => {
+                setSelectedRole('patient')
+                setError('')
+              }}
               className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-bold transition-all ${
                 selectedRole === 'patient'
                   ? 'bg-white text-forest-green shadow-xs border border-pale-sage'
@@ -256,7 +298,11 @@ export default function Login() {
 
             <button
               type="button"
-              onClick={() => setRolePersona('frontdesk')}
+              onClick={() => {
+                setSelectedRole('frontdesk')
+                setLoginMethod('email')
+                setError('')
+              }}
               className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-bold transition-all ${
                 selectedRole === 'frontdesk'
                   ? 'bg-white text-forest-green shadow-xs border border-pale-sage'
@@ -269,7 +315,11 @@ export default function Login() {
 
             <button
               type="button"
-              onClick={() => setRolePersona('doctor')}
+              onClick={() => {
+                setSelectedRole('doctor')
+                setLoginMethod('email')
+                setError('')
+              }}
               className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-bold transition-all ${
                 selectedRole === 'doctor'
                   ? 'bg-white text-forest-green shadow-xs border border-pale-sage'
@@ -289,7 +339,7 @@ export default function Login() {
               type="button"
               onClick={() => {
                 setLoginMethod('email')
-                setError('')
+                resetAbhaFlow()
               }}
               className={`pb-1.5 text-xs font-bold border-b-2 transition-all ${
                 loginMethod === 'email'
@@ -304,7 +354,7 @@ export default function Login() {
               type="button"
               onClick={() => {
                 setLoginMethod('abha')
-                setError('')
+                resetAbhaFlow()
               }}
               className={`pb-1.5 text-xs font-bold border-b-2 transition-all flex items-center gap-1 ${
                 loginMethod === 'abha'
@@ -325,6 +375,18 @@ export default function Login() {
           </div>
         )}
 
+        {notLinkedAbha && (
+          <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs text-center space-y-2">
+            <p className="font-semibold">ABDM verified this ABHA, but it is not linked to a ClinicOps patient account yet.</p>
+            <Link
+              to={`/signup?abha=${notLinkedAbha}`}
+              className="inline-block px-3 py-1.5 rounded-lg bg-forest-green text-white text-[11px] font-bold"
+            >
+              Create a patient account and link it
+            </Link>
+          </div>
+        )}
+
         {/* Success message */}
         {successMsg && (
           <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs text-center font-medium flex items-center justify-center gap-2">
@@ -336,86 +398,194 @@ export default function Login() {
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           {selectedRole === 'patient' && loginMethod === 'abha' ? (
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-semibold text-stone-800">
-                  Ayushman Bharat ABHA Number *
-                </label>
-                <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded-full">
-                  14-Digit Format
-                </span>
-              </div>
-              <div className="relative">
-                <ShieldCheckIcon className="w-4 h-4 text-emerald-700 absolute left-3.5 top-3" />
-                <input
-                  type="text"
-                  required
-                  value={abhaNumber}
-                  onChange={(e) => handleAbhaChange(e.target.value)}
-                  placeholder="91-4821-7290-3412"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] font-mono text-xs text-stone-800 focus:outline-hidden focus:border-forest-green focus:bg-white"
-                />
-              </div>
-            </div>
+            <>
+              {abhaStatus && !abhaStatus.configured && abhaStatus.environment === 'production' && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-relaxed">
+                  <p className="font-bold mb-1">Production ABDM verification is not configured</p>
+                  <p className="mb-1">
+                    This server is missing <span className="font-mono">{abhaStatus.missing.join(', ')}</span>.
+                  </p>
+                </div>
+              )}
+
+              {abhaStatus?.configured && (
+                <div className="flex items-center justify-between text-[10px] text-stone-500">
+                  <span>Identity provider: ABDM (ABHA)</span>
+                  <span
+                    className={`font-bold px-2 py-0.5 rounded-full ${
+                      abhaStatus.environment === 'production'
+                        ? 'bg-emerald-50 text-emerald-800'
+                        : 'bg-blue-50 text-blue-800'
+                    }`}
+                  >
+                    {abhaStatus.environment === 'production' ? 'Production' : 'Sandbox'}
+                  </span>
+                </div>
+              )}
+
+              {abhaStep === 'identify' ? (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-semibold text-stone-800">
+                      Ayushman Bharat ABHA Number *
+                    </label>
+                    <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded-full">
+                      14-Digit Format
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <ShieldCheckIcon className="w-4 h-4 text-emerald-700 absolute left-3.5 top-3" />
+                    <input
+                      type="text"
+                      required
+                      inputMode="numeric"
+                      autoComplete="off"
+                      value={abhaNumber}
+                      onChange={(e) => handleAbhaChange(e.target.value)}
+                      placeholder="XX-XXXX-XXXX-XXXX"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] font-mono text-xs text-stone-800 focus:outline-hidden focus:border-forest-green focus:bg-white"
+                    />
+                  </div>
+                  <p className="text-[10px] text-[#5A6D62] mt-1.5 leading-relaxed">
+                    ABDM sends an Aadhaar OTP to the mobile number linked with this ABHA. A ClinicOps
+                    password is not used for ABHA sign-in.
+                    {abhaStatus?.environment === 'sandbox' && (
+                      <span className="block mt-1 text-emerald-800 font-semibold">
+                        💡 Sandbox active: use OTP <span className="font-mono font-bold">123456</span> to verify.
+                      </span>
+                    )}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-xl bg-[#EFF5EE] border border-[#E2ECE4] text-xs">
+                    <p className="font-bold text-[#1B3E2F]">Verify the OTP sent by ABDM</p>
+                    <p className="text-[11px] text-[#5A6D62] mt-0.5 leading-relaxed">
+                      Requested for <span className="font-mono font-bold">{maskedAbha}</span>.
+                    </p>
+                    {abhaStatus?.environment === 'sandbox' ? (
+                      <div className="mt-2 p-2.5 rounded-lg bg-emerald-100/80 border border-emerald-300 text-emerald-950 text-[11px] leading-relaxed space-y-1">
+                        <p className="font-bold flex items-center gap-1.5 text-emerald-900">
+                          <span>📱 Sandbox Mode Active</span>
+                        </p>
+                        <p>
+                          No physical SMS is sent to your phone in sandbox testing. Please enter test OTP:
+                        </p>
+                        <div className="pt-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setAbhaOtp('123456')}
+                            className="font-mono font-bold text-xs bg-white px-2 py-1 rounded-md border border-emerald-400 text-emerald-800 hover:bg-emerald-50 shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+                          >
+                            <span>123456</span>
+                            <span className="text-[10px] font-sans text-emerald-600 font-normal">(click to autofill)</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-[#5A6D62] mt-0.5 leading-relaxed">
+                        The code is sent to the mobile number registered against this ABHA&apos;s Aadhaar.
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-stone-800 mb-1.5">
+                      6-digit ABDM OTP *
+                    </label>
+                    <div className="relative">
+                      <ShieldCheckIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
+                      <input
+                        type="text"
+                        required
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        value={abhaOtp}
+                        onChange={(e) => setAbhaOtp(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                        placeholder="••••••"
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] font-mono tracking-[0.4em] text-sm text-stone-800 focus:outline-hidden focus:border-forest-green focus:bg-white"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] pt-1">
+                      <span className="text-[#5A6D62]">
+                        {resendCooldown > 0 ? (
+                          `Resend OTP in ${resendCooldown}s`
+                        ) : resendCount >= 3 ? (
+                          <span className="text-amber-800 font-semibold">Resend limit reached (3/3)</span>
+                        ) : (
+                          `Resends left: ${3 - resendCount}`
+                        )}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleResendAbhaOtp}
+                        disabled={isLoading || resendCooldown > 0 || resendCount >= 3}
+                        className="font-semibold text-forest-green hover:underline disabled:opacity-40 disabled:no-underline cursor-pointer flex items-center gap-1"
+                      >
+                        <ArrowPathIcon className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                        Resend ABDM OTP
+                      </button>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={resetAbhaFlow}
+                    className="text-[11px] text-forest-green font-semibold hover:underline"
+                  >
+                    Use a different ABHA number
+                  </button>
+                </div>
+              )}
+            </>
           ) : (
-            <div>
-              <label className="block text-xs font-semibold text-stone-800 mb-1.5">
-                Email Address *
-              </label>
-              <div className="relative">
-                <EnvelopeIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your registered email"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs text-stone-800 placeholder-stone-400 focus:outline-hidden focus:border-forest-green focus:bg-white"
-                />
+            <>
+              <div>
+                <label className="block text-xs font-semibold text-stone-800 mb-1.5">
+                  Email Address *
+                </label>
+                <div className="relative">
+                  <EnvelopeIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Enter your registered email"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs text-stone-800 placeholder-stone-400 focus:outline-hidden focus:border-forest-green focus:bg-white"
+                  />
+                </div>
               </div>
-            </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-stone-800">
+                    Password *
+                  </label>
+                  <Link to="/forgot-password" className="text-[11px] text-forest-green hover:underline">
+                    Forgot password?
+                  </Link>
+                </div>
+                <div className="relative">
+                  <LockClosedIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs text-stone-800 placeholder-stone-400 focus:outline-hidden focus:border-forest-green focus:bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-3 text-stone-400 hover:text-stone-600"
+                  >
+                    {showPassword ? <EyeSlashIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            </>
           )}
-
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-semibold text-stone-800">
-                Password *
-              </label>
-              <Link to="/forgot-password" className="text-[11px] text-forest-green hover:underline">
-                Forgot password?
-              </Link>
-            </div>
-            <div className="relative">
-              <LockClosedIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
-              <input
-                type={showPassword ? 'text' : 'password'}
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] text-xs text-stone-800 placeholder-stone-400 focus:outline-hidden focus:border-forest-green focus:bg-white"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 top-3 text-stone-400 hover:text-stone-600"
-              >
-                {showPassword ? <EyeSlashIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-1">
-            <label className="flex items-center space-x-2 text-xs text-[#5A6D62] cursor-pointer">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="w-3.5 h-3.5 rounded text-forest-green border-gray-300 focus:ring-forest-green"
-              />
-              <span>Remember this session</span>
-            </label>
-          </div>
 
           <button
             type="submit"
@@ -423,50 +593,74 @@ export default function Login() {
             className="w-full py-3 rounded-xl bg-forest-green text-white font-semibold text-xs tracking-wider uppercase hover:bg-forest-green/90 transition-all shadow-xs disabled:opacity-50"
           >
             {isLoading
-              ? 'Authenticating...'
-              : `Sign In to ${selectedRole === 'doctor' ? 'Doctor' : selectedRole === 'frontdesk' ? 'Front Desk' : 'Patient'} Workspace`}
+              ? loginMethod === 'abha'
+                ? abhaStep === 'identify'
+                  ? 'Requesting ABDM OTP…'
+                  : 'Verifying with ABDM…'
+                : 'Authenticating...'
+              : loginMethod === 'abha'
+                ? abhaStep === 'identify'
+                  ? 'Send ABDM OTP'
+                  : 'Verify OTP & Sign In'
+                : 'Sign In'}
           </button>
+          {selectedRole === 'patient' && loginMethod === 'abha' ? (
+            <p className="text-center text-[10px] text-stone-500 leading-relaxed">
+              ClinicOps does not store your Aadhaar number or ABDM OTP. They are used only to
+              complete this verification with ABDM.
+            </p>
+          ) : (
+            <p className="text-center text-[10px] text-stone-500">
+              Your workspace is chosen by the role stored on your account.
+            </p>
+          )}
         </form>
 
         <p className="text-center text-xs text-stone-600 mt-5">
-          New patient or staff member?{' '}
+          New patient?{' '}
           <Link to="/signup" className="font-bold text-forest-green hover:underline">
-            Register / Link ABHA
+            Create a patient account
           </Link>
         </p>
 
-        {/* Demo Fast Login Switcher with Indian names */}
-        <div className="mt-5 p-3 rounded-2xl bg-[#EDF4EE] border border-pale-sage text-[11px] text-stone-700 space-y-1">
-          <p className="font-bold text-forest-green uppercase tracking-wider text-[10px] mb-1">
-            Quick Persona Switch (Indian Healthcare Accounts):
-          </p>
-          <div className="flex flex-col gap-1">
-            <button
-              type="button"
-              onClick={() => setRolePersona('patient')}
-              className="text-left py-1 px-2 rounded-lg hover:bg-white transition-colors flex justify-between"
-            >
-              <span><strong>Patient:</strong> Yukta Ravindra Thakur</span>
-              <span className="text-forest-green font-semibold">patient@clinicops.com</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setRolePersona('frontdesk')}
-              className="text-left py-1 px-2 rounded-lg hover:bg-white transition-colors flex justify-between"
-            >
-              <span><strong>Front Desk:</strong> Priya Deshmukh</span>
-              <span className="text-forest-green font-semibold">frontdesk@clinicops.com</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setRolePersona('doctor')}
-              className="text-left py-1 px-2 rounded-lg hover:bg-white transition-colors flex justify-between"
-            >
-              <span><strong>Doctor:</strong> Dr. Sarah Sharma</span>
-              <span className="text-forest-green font-semibold">doctor@clinicops.com</span>
-            </button>
+        {/* Local development accounts — never shown in a production build */}
+        {import.meta.env.DEV && (
+          <div className="mt-5 p-3 rounded-2xl bg-[#EDF4EE] border border-pale-sage text-[11px] text-stone-700 space-y-1">
+            <p className="font-bold text-forest-green uppercase tracking-wider text-[10px] mb-1">
+              Local demo accounts (development only)
+            </p>
+            <p className="text-[10px] text-stone-500 mb-1.5">
+              Fills the sign-in form email for an account that exists in the local
+              database. Enter your development account password to log in.
+            </p>
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={() => fillDemoAccount('patient')}
+                className="text-left py-1 px-2 rounded-lg hover:bg-white transition-colors flex justify-between"
+              >
+                <span><strong>Patient:</strong> Yukta Ravindra Thakur</span>
+                <span className="text-forest-green font-semibold">patient@clinicops.com</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => fillDemoAccount('frontdesk')}
+                className="text-left py-1 px-2 rounded-lg hover:bg-white transition-colors flex justify-between"
+              >
+                <span><strong>Front Desk:</strong> Olivia Martin</span>
+                <span className="text-forest-green font-semibold">frontdesk@clinicops.com</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => fillDemoAccount('doctor')}
+                className="text-left py-1 px-2 rounded-lg hover:bg-white transition-colors flex justify-between"
+              >
+                <span><strong>Doctor:</strong> Dr. Elena Cooper</span>
+                <span className="text-forest-green font-semibold">doctor@clinicops.com</span>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
       </div>
     </div>

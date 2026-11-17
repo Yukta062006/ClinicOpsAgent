@@ -1,4 +1,15 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { apiAuth, apiAbha, apiQueue, ApiResponse, AbhaChallenge } from '../utils/api'
+import { announcePatientCalling } from '../utils/speechAnnouncer'
+
+export type AuthStatus = 'loading' | 'authenticated' | 'anonymous' | 'unreachable'
+
+export interface AuthResult {
+  success: boolean
+  user?: any
+  error?: string
+  code?: string
+}
 
 // Types
 export interface Patient {
@@ -17,10 +28,13 @@ export interface Patient {
   insurance: string;
   primaryPhysician: string;
   abhaId?: string;
+  abhaVerified?: boolean;
+  abhaAddress?: string;
   aadhaar?: string;
   pan?: string;
   bloodGroup?: string;
   emergencyContact?: string;
+  preferredLanguage?: 'en' | 'hi' | 'mr' | 'bn';
 }
 
 export interface Appointment {
@@ -43,14 +57,21 @@ export interface QueueItem {
   token: string;
   patientId: string;
   patientName: string;
+  doctorId?: string;
   doctorName?: string;
   room?: string;
   arrivalTime: string;
-  status: 'waiting' | 'called' | 'in-progress' | 'completed' | 'cancelled';
+  status: 'waiting' | 'called' | 'in-progress' | 'completed' | 'cancelled' | 'paused';
   priority: 'normal' | 'urgent';
   department: string;
   reason: string;
   estimatedWait?: string;
+  appointmentId?: string;
+  orderIndex?: number;
+  callCount?: number;
+  lastCalledAt?: string;
+  requeuedAt?: string;
+  notes?: string;
 }
 
 export interface Consultation {
@@ -192,10 +213,17 @@ interface DataContextType {
   queue: QueueItem[];
   addToQueue: (item: QueueItem) => void;
   updateQueueItem: (id: string, status: QueueItem['status']) => void;
+  requeuePatient: (queueId: string, note?: string) => void;
+  callAgainPatient: (queueId: string, language?: 'en' | 'hi' | 'mr' | 'bn') => QueueItem | undefined;
+  returnToWaiting: (queueId: string, note?: string) => void;
+  moveQueuePosition: (queueId: string, direction: 'up' | 'down') => void;
+  reactivateAppointment: (appointmentId: string) => void;
+  queueAuditHistory: Array<{ id: string; queue_id: string; token: string; action: string; previous_status?: string; new_status?: string; notes?: string; created_at: string }>;
   getNextInQueue: () => QueueItem | undefined;
   getNextSequentialToken: (department?: string) => string;
   checkInPatient: (patientId: string, doctorName?: string, department?: string, reason?: string) => QueueItem;
-  callNextPatient: (doctorId?: string) => QueueItem | undefined;
+  callNextPatient: (doctorId?: string, language?: 'en' | 'hi' | 'mr' | 'bn') => QueueItem | undefined;
+  callPatientById: (queueId: string, language?: 'en' | 'hi' | 'mr' | 'bn') => QueueItem | undefined;
   startConsultation: (queueId: string) => void;
   completeConsultation: (queueId: string, consultationData?: Partial<Consultation>) => void;
   activeToken: string;
@@ -249,6 +277,17 @@ interface DataContextType {
   // User / Auth
   user: any;
   setUser: (user: any) => void;
+  /** 'loading' until the stored token has been validated against the server. */
+  authStatus: AuthStatus;
+  authError: string | null;
+  signIn: (email: string, password: string) => Promise<AuthResult>;
+  /** Requests an ABDM login OTP for an ABHA number. */
+  requestAbhaLoginOtp: (abhaNumber: string) => Promise<ApiResponse<AbhaChallenge>>;
+  /** Completes ABHA sign-in after ABDM verifies the OTP. */
+  signInWithAbha: (challengeId: string, otp: string) => Promise<AuthResult>;
+  signUp: (payload: Parameters<typeof apiAuth.register>[0]) => Promise<AuthResult>;
+  signOut: () => void;
+  retrySessionCheck: () => void;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -264,9 +303,6 @@ const initialPatients: Patient[] = [
     email: 'yukta@clinicops.com',
     address: 'Flat 402, Sea Green Apts, Marine Drive, Mumbai 400020',
     dateOfBirth: '2000-07-14',
-    abhaId: '91-4821-7290-3412',
-    aadhaar: 'XXXX-XXXX-4912',
-    pan: 'AAAPT4912K',
     bloodGroup: 'O+',
     emergencyContact: '+91 98201 99887 (Ravindra Thakur - Father)',
     medicalHistory: ['Mild Asthma (controlled)', 'Seasonal Bronchial Allergy'],
@@ -285,9 +321,6 @@ const initialPatients: Patient[] = [
     email: 'maya.patel@example.com',
     address: '45 Hill Road, Bandra West, Mumbai 400050',
     dateOfBirth: '1992-06-18',
-    abhaId: '14-5512-9901-2283',
-    aadhaar: 'XXXX-XXXX-2283',
-    pan: 'BBMPP2283L',
     bloodGroup: 'B+',
     emergencyContact: '+91 98192 11223',
     medicalHistory: ['Hypertension stage 1', 'Vitamin D deficiency'],
@@ -306,9 +339,6 @@ const initialPatients: Patient[] = [
     email: 'aarav.sharma@example.com',
     address: '78 Shivaji Nagar, FC Road, Pune 411005',
     dateOfBirth: '1990-05-15',
-    abhaId: '14-8832-1094-5521',
-    aadhaar: 'XXXX-XXXX-8821',
-    pan: 'AASPS8821M',
     bloodGroup: 'A+',
     emergencyContact: '+91 98234 11223',
     medicalHistory: ['Hypertension', 'Seasonal Rhinitis'],
@@ -327,9 +357,6 @@ const initialPatients: Patient[] = [
     email: 'ananya.patil@example.com',
     address: '12 Koregaon Park, Lane 7, Pune 411001',
     dateOfBirth: '1995-08-22',
-    abhaId: '22-4910-3382-7719',
-    aadhaar: 'XXXX-XXXX-3382',
-    pan: 'AAPPA3382K',
     bloodGroup: 'AB+',
     emergencyContact: '+91 98451 99887',
     medicalHistory: ['Type 2 Diabetes Mellitus (HbA1c 6.8)'],
@@ -348,9 +375,6 @@ const initialPatients: Patient[] = [
     email: 'rohan.deshmukh@example.com',
     address: '55 Kothrud, DP Road, Pune 411038',
     dateOfBirth: '1982-11-05',
-    abhaId: '33-7719-8820-1194',
-    aadhaar: 'XXXX-XXXX-1194',
-    pan: 'ARDPD1194Q',
     bloodGroup: 'O+',
     emergencyContact: '+91 98765 00998',
     medicalHistory: ['Coronary Artery Disease', 'Dyslipidemia'],
@@ -369,9 +393,6 @@ const initialPatients: Patient[] = [
     email: 'sneha.kulkarni@example.com',
     address: '101 J.M. Road, Deccan, Pune 411004',
     dateOfBirth: '1993-03-12',
-    abhaId: '44-9901-2283-4412',
-    aadhaar: 'XXXX-XXXX-4412',
-    pan: 'BSKPK4412H',
     bloodGroup: 'A+',
     emergencyContact: '+91 98345 11229',
     medicalHistory: ['Hypothyroidism on Thyroxine 50mcg'],
@@ -584,6 +605,62 @@ const initialQueue: QueueItem[] = [
     department: 'Room 02',
     reason: 'Prescription renewal',
     estimatedWait: '02 min'
+  },
+  {
+    id: 'q-8',
+    token: 'GM-020',
+    patientId: 'p-priya-sharma',
+    patientName: 'Priya Sharma',
+    doctorName: 'Dr. Sarah Sharma',
+    room: 'Room 01',
+    arrivalTime: '08:50 AM',
+    status: 'completed',
+    priority: 'normal',
+    department: 'General Medicine',
+    reason: 'Follow-up Consultation',
+    estimatedWait: 'Completed'
+  },
+  {
+    id: 'q-9',
+    token: 'A-011',
+    patientId: 'p-rahul-patil',
+    patientName: 'Rahul Patil',
+    doctorName: 'Dr. Elena Cooper',
+    room: 'Room 02',
+    arrivalTime: '09:05 AM',
+    status: 'completed',
+    priority: 'normal',
+    department: 'Room 02',
+    reason: 'Blood Pressure Check',
+    estimatedWait: 'Completed'
+  },
+  {
+    id: 'q-10',
+    token: 'B-006',
+    patientId: 'p-amit-kulkarni',
+    patientName: 'Amit Kulkarni',
+    doctorName: 'Dr. Daniel Kim',
+    room: 'Room 03',
+    arrivalTime: '09:15 AM',
+    status: 'cancelled',
+    priority: 'normal',
+    department: 'Room 03',
+    reason: 'Cancelled - Rescheduling requested',
+    estimatedWait: 'Cancelled'
+  },
+  {
+    id: 'q-11',
+    token: 'A-017',
+    patientId: 'p-sneha-deshmukh',
+    patientName: 'Sneha Deshmukh',
+    doctorName: 'Dr. Elena Cooper',
+    room: 'Room 02',
+    arrivalTime: '09:42 AM',
+    status: 'paused',
+    priority: 'normal',
+    department: 'Room 02',
+    reason: 'Paused - Awaiting Lab Tests',
+    estimatedWait: 'Paused'
   }
 ];
 
@@ -995,11 +1072,42 @@ const initialAchievements: Achievement[] = [
   { id: '9', title: 'Point Collector', description: 'Reach 1,000 total learning points', unlocked: false, dateUnlocked: 'In progress', points: 500, icon: 'trophy' }
 ];
 
+// Identifiers that were fabricated for the original demo dataset. They are
+// removed from any cached patient list so the interface never presents an
+// invented ID as a real ABHA/Aadhaar number.
+const SIMULATED_ABHA_NUMBERS = new Set([
+  '91-4821-7290-3412',
+  '14-5512-9901-2283',
+  '14-8832-1094-5521',
+  '22-4910-3382-7719',
+  '33-7719-8820-1194',
+  '44-9901-2283-4412',
+  '91-4523-8890-1234'
+]);
+
+function scrubSimulatedPatientIdentifiers(patients: Patient[]): Patient[] {
+  return patients.map((patient) => {
+    const next: Patient = { ...patient };
+    delete (next as Patient & { abhaStatus?: string }).abhaStatus;
+    if (next.abhaId && SIMULATED_ABHA_NUMBERS.has(next.abhaId)) {
+      delete next.abhaId;
+      delete next.aadhaar;
+      delete next.pan;
+    }
+    return next;
+  });
+}
+
 export function DataProvider({ children }: { children: ReactNode }) {
   // Local state initialized with fallback to realistic data
   const [patients, setPatients] = useState<Patient[]>(() => {
     const saved = localStorage.getItem('clinicops_patients_v2');
-    return saved ? JSON.parse(saved) : initialPatients;
+    if (!saved) return initialPatients;
+    try {
+      return scrubSimulatedPatientIdentifiers(JSON.parse(saved));
+    } catch {
+      return initialPatients;
+    }
   });
 
   const [appointments, setAppointments] = useState<Appointment[]>(() => {
@@ -1010,6 +1118,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [queue, setQueue] = useState<QueueItem[]>(() => {
     const saved = localStorage.getItem('clinicops_queue_v2');
     return saved ? JSON.parse(saved) : initialQueue;
+  });
+
+  const [queueAuditHistory, setQueueAuditHistory] = useState<Array<{ id: string; queue_id: string; token: string; action: string; previous_status?: string; new_status?: string; notes?: string; created_at: string }>>(() => {
+    const saved = localStorage.getItem('clinicops_queue_audit_v2');
+    return saved ? JSON.parse(saved) : [
+      { id: 'audit-1', queue_id: 'q-8', token: 'GM-020', action: 'completed', previous_status: 'in-progress', new_status: 'completed', notes: 'Consultation finished', created_at: '2026-11-10 09:20:00' },
+      { id: 'audit-2', queue_id: 'q-9', token: 'A-011', action: 'completed', previous_status: 'in-progress', new_status: 'completed', notes: 'Consultation finished', created_at: '2026-11-10 09:30:00' },
+      { id: 'audit-3', queue_id: 'q-10', token: 'B-006', action: 'cancelled', previous_status: 'waiting', new_status: 'cancelled', notes: 'Patient requested reschedule', created_at: '2026-11-10 09:18:00' }
+    ];
   });
 
   const [consultations, setConsultations] = useState<Consultation[]>(() => {
@@ -1106,37 +1223,127 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const [user, setUser] = useState<any>(() => {
     const saved = localStorage.getItem('clinicops_user');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        return null;
-      }
+    if (!saved) return null;
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      return null;
     }
+  });
+
+  // A cached user object is never trusted on its own: it is only accepted after
+  // the stored JWT has been validated against the backend.
+  const [authStatus, setAuthStatus] = useState<AuthStatus>(() =>
+    localStorage.getItem('clinicops_token') ? 'loading' : 'anonymous'
+  );
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [sessionCheckId, setSessionCheckId] = useState(0);
+
+  const clearSession = () => {
+    localStorage.removeItem('clinicops_token');
+    localStorage.removeItem('clinicops_user');
+    setUser(null);
+  };
+
+  const applySession = (token: string, nextUser: any) => {
+    localStorage.setItem('clinicops_token', token);
+    localStorage.setItem('clinicops_user', JSON.stringify(nextUser));
+    setUser(nextUser);
+    setAuthError(null);
+    setAuthStatus('authenticated');
+  };
+
+  useEffect(() => {
     const token = localStorage.getItem('clinicops_token');
-    if (token) {
+    if (!token) {
+      setAuthStatus('anonymous');
+      return;
+    }
+
+    let cancelled = false;
+    setAuthStatus('loading');
+
+    apiAuth.me(token).then((response) => {
+      if (cancelled) return;
+
+      if (response.success && response.data?.user) {
+        localStorage.setItem('clinicops_user', JSON.stringify(response.data.user));
+        setUser(response.data.user);
+        setAuthStatus('authenticated');
+        setAuthError(null);
+        return;
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        clearSession();
+        setAuthStatus('anonymous');
+        setAuthError(response.error || 'Your session has expired. Please sign in again.');
+        return;
+      }
+
+      // Backend unreachable or erroring: do not pretend the session is valid.
+      setAuthError(response.error || 'Unable to verify your session with the ClinicOps server.');
+      setAuthStatus('unreachable');
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionCheckId]);
+
+  const signIn = async (email: string, password: string): Promise<AuthResult> => {
+    const response = await apiAuth.login(email, password);
+    if (!response.success || !response.data) {
+      return { success: false, error: response.error || 'Unable to sign in. Please try again.', code: response.code };
+    }
+    applySession(response.data.token, response.data.user);
+    return { success: true, user: response.data.user };
+  };
+
+  const requestAbhaLoginOtp = async (abhaNumber: string) => apiAbha.requestLoginOtp(abhaNumber);
+
+  const signInWithAbha = async (challengeId: string, otp: string): Promise<AuthResult> => {
+    const response = await apiAbha.verifyLoginOtp(challengeId, otp);
+    if (!response.success || !response.data) {
       return {
-        id: 'u-yukta',
-        name: 'Yukta Ravindra Thakur',
-        email: 'yukta@clinicops.com',
-        role: 'patient',
-        phone: '+91 98201 45892'
+        success: false,
+        error: response.error || 'ABDM did not confirm this OTP. Please request a new code.',
+        code: response.code,
       };
     }
-    return null;
-  });
+    applySession(response.data.token, response.data.user);
+    return { success: true, user: response.data.user };
+  };
+
+  const signUp = async (payload: Parameters<typeof apiAuth.register>[0]): Promise<AuthResult> => {
+    const response = await apiAuth.register(payload);
+    if (!response.success || !response.data) {
+      return { success: false, error: response.error || 'Unable to create the account. Please try again.' };
+    }
+    applySession(response.data.token, response.data.user);
+    return { success: true, user: response.data.user };
+  };
+
+  const signOut = () => {
+    clearSession();
+    setAuthStatus('anonymous');
+    setAuthError(null);
+  };
+
+  const retrySessionCheck = () => setSessionCheckId((id) => id + 1);
 
   // Current patient object
   const currentPatient = patients.find(p => p.id === 'p-yukta' || p.email === user?.email) || patients[0];
 
-  // Active serving token
-  const inProgressQueueItem = queue.find(q => q.status === 'in-progress' || q.status === 'called');
-  const activeToken = inProgressQueueItem ? inProgressQueueItem.token : 'A-013';
+  // Active serving token (prioritize 'called' so next patient announcement immediately reflects)
+  const inProgressQueueItem = queue.find(q => q.status === 'called') || queue.find(q => q.status === 'in-progress');
+  const activeToken = inProgressQueueItem ? inProgressQueueItem.token : (queue[0]?.token || '001');
 
   // Persistence effects
   useEffect(() => { localStorage.setItem('clinicops_patients_v2', JSON.stringify(patients)); }, [patients]);
   useEffect(() => { localStorage.setItem('clinicops_appointments_v2', JSON.stringify(appointments)); }, [appointments]);
   useEffect(() => { localStorage.setItem('clinicops_queue_v2', JSON.stringify(queue)); }, [queue]);
+  useEffect(() => { localStorage.setItem('clinicops_queue_audit_v2', JSON.stringify(queueAuditHistory)); }, [queueAuditHistory]);
   useEffect(() => { localStorage.setItem('clinicops_consultations_v2', JSON.stringify(consultations)); }, [consultations]);
   useEffect(() => { localStorage.setItem('clinicops_saved_research_v2', JSON.stringify(savedResearch)); }, [savedResearch]);
   useEffect(() => { localStorage.setItem('clinicops_saved_videos_v2', JSON.stringify(savedVideos)); }, [savedVideos]);
@@ -1157,8 +1364,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (user) {
       localStorage.setItem('clinicops_user', JSON.stringify(user));
     } else {
+      // The token itself is only cleared by clearSession/signOut so an in-flight
+      // session check cannot be invalidated by this effect.
       localStorage.removeItem('clinicops_user');
-      localStorage.removeItem('clinicops_token');
     }
   }, [user]);
 
@@ -1187,22 +1395,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     const storedLast = parseInt(localStorage.getItem('clinicops_sequential_counter') || '0', 10);
     if (storedLast > max) max = storedLast;
-    
-    // Ensure baseline starts realistically matching UI
-    if (max < 16) max = 16;
-    
+
     const nextNum = max + 1;
     localStorage.setItem('clinicops_sequential_counter', nextNum.toString());
     const padded = String(nextNum).padStart(3, '0');
 
-    let prefix = 'A-';
+    let prefix = 'GM-';
     const deptLower = (department || '').toLowerCase();
-    if (deptLower.includes('general medicine') || deptLower.includes('gm') || deptLower.includes('checkup')) {
-      prefix = 'GM-';
+    if (deptLower.includes('room 02') || deptLower.includes('cooper') || deptLower.includes('family')) {
+      prefix = 'A-';
     } else if (deptLower.includes('room 03') || deptLower.includes('kim')) {
       prefix = 'B-';
-    } else if (deptLower.includes('cardio')) {
+    } else if (deptLower.includes('cardio') || deptLower.includes('patil')) {
       prefix = 'CD-';
+    } else if (deptLower.includes('pediatric') || deptLower.includes('deshmukh')) {
+      prefix = 'PD-';
     }
 
     return `${prefix}${padded}`;
@@ -1342,22 +1549,240 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return newItem;
   };
 
-  const callNextPatient = (doctorId?: string): QueueItem | undefined => {
-    const waitingPatient = queue.find(q => q.status === 'waiting');
+  const callNextPatient = (doctorId?: string, language: 'en' | 'hi' | 'mr' | 'bn' = 'en'): QueueItem | undefined => {
+    // Find first eligible patient with Waiting status
+    const waitingPatient = queue.find(q => q.status === 'waiting' && (!doctorId || q.doctorId === doctorId));
     if (!waitingPatient) return undefined;
 
-    setQueue(prev => prev.map(q => q.id === waitingPatient.id ? { ...q, status: 'called' } : q));
+    // Prevent same patient from being called twice simultaneously
+    if (waitingPatient.status === 'called') return undefined;
+
+    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setQueue(prev => prev.map(q => q.id === waitingPatient.id ? { 
+      ...q, 
+      status: 'called', 
+      lastCalledAt: nowTime, 
+      callCount: (q.callCount || 0) + 1 
+    } : q));
     
-    // Play announcement chime
-    if (soundEnabled && 'speechSynthesis' in window) {
-      try {
-        const msg = new SpeechSynthesisUtterance(`Token ${waitingPatient.token.replace('-', ' ')}, please proceed to ${waitingPatient.room || 'Room 02'}`);
-        msg.rate = 0.9;
-        window.speechSynthesis.speak(msg);
-      } catch (e) {}
+    // Announce patient calling via Project Vaani Natural Female Voice (with fallback)
+    if (soundEnabled) {
+      announcePatientCalling({
+        token: waitingPatient.token,
+        patientName: waitingPatient.patientName,
+        room: waitingPatient.room || 'Room 02',
+        doctorName: waitingPatient.doctorName,
+        language
+      });
+    }
+
+    // Record audit log
+    const auditEntry = {
+      id: `audit-${Date.now()}`,
+      queue_id: waitingPatient.id,
+      token: waitingPatient.token,
+      action: 'called',
+      previous_status: 'waiting',
+      new_status: 'called',
+      notes: `Called to ${waitingPatient.room || 'Room 02'}`,
+      created_at: new Date().toISOString()
+    };
+    setQueueAuditHistory(prev => [auditEntry, ...prev]);
+
+    const authToken = localStorage.getItem('clinicops_token');
+    if (authToken) {
+      apiQueue.updateStatus(authToken, waitingPatient.id, 'called').catch(() => {});
     }
 
     return waitingPatient;
+  };
+
+  const callPatientById = (queueId: string, language: 'en' | 'hi' | 'mr' | 'bn' = 'en'): QueueItem | undefined => {
+    const patientItem = queue.find(q => q.id === queueId);
+    if (!patientItem) return undefined;
+
+    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setQueue(prev => prev.map(q => q.id === queueId ? { 
+      ...q, 
+      status: 'called', 
+      lastCalledAt: nowTime,
+      callCount: (q.callCount || 0) + 1
+    } : q));
+
+    if (soundEnabled) {
+      announcePatientCalling({
+        token: patientItem.token,
+        patientName: patientItem.patientName,
+        room: patientItem.room || 'Room 02',
+        doctorName: patientItem.doctorName,
+        language
+      });
+    }
+
+    const auditEntry = {
+      id: `audit-${Date.now()}`,
+      queue_id: queueId,
+      token: patientItem.token,
+      action: 'called',
+      previous_status: patientItem.status,
+      new_status: 'called',
+      notes: `Called to ${patientItem.room || 'Room 02'}`,
+      created_at: new Date().toISOString()
+    };
+    setQueueAuditHistory(prev => [auditEntry, ...prev]);
+
+    const authToken = localStorage.getItem('clinicops_token');
+    if (authToken) {
+      apiQueue.updateStatus(authToken, queueId, 'called').catch(() => {});
+    }
+
+    return patientItem;
+  };
+
+  // Requeue Patient (Restores to active waiting queue, preserves token and patient record, places at end by default)
+  const requeuePatient = (queueId: string, note?: string) => {
+    const item = queue.find(q => q.id === queueId);
+    if (!item) return;
+
+    const previousStatus = item.status;
+    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const requeuedItem: QueueItem = {
+      ...item,
+      status: 'waiting',
+      arrivalTime: nowTime,
+      requeuedAt: nowTime,
+      notes: note || 'Requeued to active waiting queue'
+    };
+
+    // Place at the end of the active queue by default
+    setQueue(prev => {
+      const rest = prev.filter(q => q.id !== queueId);
+      return [...rest, requeuedItem];
+    });
+
+    // Also sync appointment status if applicable
+    setAppointments(prev => prev.map(a => {
+      if (a.token === item.token || a.patientId === item.patientId) {
+        return { ...a, status: 'confirmed' };
+      }
+      return a;
+    }));
+
+    // Audit log
+    const auditEntry = {
+      id: `audit-${Date.now()}`,
+      queue_id: queueId,
+      token: item.token,
+      action: 'requeue',
+      previous_status: previousStatus,
+      new_status: 'waiting',
+      notes: note || 'Requeued to active waiting queue',
+      created_at: new Date().toISOString()
+    };
+    setQueueAuditHistory(prev => [auditEntry, ...prev]);
+
+    const authToken = localStorage.getItem('clinicops_token');
+    if (authToken) {
+      apiQueue.requeue(authToken, queueId, note).catch(() => {});
+    }
+  };
+
+  // Call Again (Repeats announcement for called patient without duplicate entry or token change)
+  const callAgainPatient = (queueId: string, language: 'en' | 'hi' | 'mr' | 'bn' = 'en'): QueueItem | undefined => {
+    const item = queue.find(q => q.id === queueId);
+    if (!item) return undefined;
+
+    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const updatedItem: QueueItem = {
+      ...item,
+      status: 'called',
+      callCount: (item.callCount || 1) + 1,
+      lastCalledAt: nowTime
+    };
+
+    setQueue(prev => prev.map(q => q.id === queueId ? updatedItem : q));
+
+    if (soundEnabled) {
+      announcePatientCalling({
+        token: item.token,
+        patientName: item.patientName,
+        room: item.room || 'Room 02',
+        doctorName: item.doctorName,
+        language
+      });
+    }
+
+    const auditEntry = {
+      id: `audit-${Date.now()}`,
+      queue_id: queueId,
+      token: item.token,
+      action: 'call_again',
+      previous_status: item.status,
+      new_status: 'called',
+      notes: `Voice repeated (Call #${updatedItem.callCount})`,
+      created_at: new Date().toISOString()
+    };
+    setQueueAuditHistory(prev => [auditEntry, ...prev]);
+
+    const authToken = localStorage.getItem('clinicops_token');
+    if (authToken) {
+      apiQueue.callAgain(authToken, queueId).catch(() => {});
+    }
+
+    return updatedItem;
+  };
+
+  // Return to Waiting (For called patients who did not arrive / no-show)
+  const returnToWaiting = (queueId: string, note?: string) => {
+    requeuePatient(queueId, note || 'Patient called but did not arrive - returned to waiting');
+  };
+
+  // Move queue position among waiting patients
+  const moveQueuePosition = (queueId: string, direction: 'up' | 'down') => {
+    setQueue(prev => {
+      const waitingItems = prev.filter(q => q.status === 'waiting');
+      const idx = waitingItems.findIndex(q => q.id === queueId);
+      if (idx === -1) return prev;
+
+      if (direction === 'up' && idx > 0) {
+        const itemA = waitingItems[idx];
+        const itemB = waitingItems[idx - 1];
+        const newWaiting = [...waitingItems];
+        newWaiting[idx - 1] = itemA;
+        newWaiting[idx] = itemB;
+        const nonWaiting = prev.filter(q => q.status !== 'waiting');
+        return [...newWaiting, ...nonWaiting];
+      } else if (direction === 'down' && idx < waitingItems.length - 1) {
+        const itemA = waitingItems[idx];
+        const itemB = waitingItems[idx + 1];
+        const newWaiting = [...waitingItems];
+        newWaiting[idx + 1] = itemA;
+        newWaiting[idx] = itemB;
+        const nonWaiting = prev.filter(q => q.status !== 'waiting');
+        return [...newWaiting, ...nonWaiting];
+      }
+      return prev;
+    });
+
+    const authToken = localStorage.getItem('clinicops_token');
+    if (authToken) {
+      apiQueue.move(authToken, queueId, direction).catch(() => {});
+    }
+  };
+
+  // Reactivate cancelled appointment and requeue
+  const reactivateAppointment = (appointmentId: string) => {
+    const apt = appointments.find(a => a.id === appointmentId);
+    if (!apt) return;
+
+    setAppointments(prev => prev.map(a => a.id === appointmentId ? { ...a, status: 'confirmed' } : a));
+
+    const existingQ = queue.find(q => q.appointmentId === appointmentId || q.patientId === apt.patientId);
+    if (existingQ) {
+      requeuePatient(existingQ.id, 'Appointment reactivated and requeued');
+    } else {
+      checkInPatient(apt.patientId, apt.doctorName, apt.type, apt.notes);
+    }
   };
 
   const startConsultation = (queueId: string) => {
@@ -1366,7 +1791,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const completeConsultation = (queueId: string, consultationData?: Partial<Consultation>) => {
     const queueItem = queue.find(q => q.id === queueId);
-    setQueue(prev => prev.map(q => q.id === queueId ? { ...q, status: 'completed' } : q));
+    
+    // Find next eligible waiting patient to auto-advance queue
+    const nextWaiting = queue.find(q => q.status === 'waiting' && q.id !== queueId);
+
+    setQueue(prev => prev.map(q => {
+      if (q.id === queueId) {
+        return { ...q, status: 'completed' as const };
+      }
+      if (nextWaiting && q.id === nextWaiting.id) {
+        return { ...q, status: 'called' as const };
+      }
+      return q;
+    }));
 
     if (queueItem) {
       // Complete associated appointment
@@ -1395,6 +1832,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
         };
         setConsultations(prev => [newRecord, ...prev]);
       }
+    }
+
+    // Auto-advance announcement with Project Vaani natural female voice
+    if (nextWaiting && soundEnabled) {
+      announcePatientCalling({
+        token: nextWaiting.token,
+        patientName: nextWaiting.patientName,
+        room: nextWaiting.room || 'Room 02',
+        doctorName: nextWaiting.doctorName,
+        language: 'en'
+      });
     }
   };
 
@@ -1620,10 +2068,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     queue,
     addToQueue,
     updateQueueItem,
+    requeuePatient,
+    callAgainPatient,
+    returnToWaiting,
+    moveQueuePosition,
+    reactivateAppointment,
+    queueAuditHistory,
     getNextInQueue,
     getNextSequentialToken,
     checkInPatient,
     callNextPatient,
+    callPatientById,
     startConsultation,
     completeConsultation,
     activeToken,
@@ -1674,6 +2129,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     user,
     setUser,
+    authStatus,
+    authError,
+    signIn,
+    requestAbhaLoginOtp,
+    signInWithAbha,
+    signUp,
+    signOut,
+    retrySessionCheck,
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

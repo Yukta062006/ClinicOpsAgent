@@ -16,58 +16,88 @@ import MedicalVideos from './pages/MedicalVideos'
 import HealthGames from './pages/HealthGames'
 import LearningProgress from './pages/LearningProgress'
 import DailyZipChallenge from './pages/DailyZipChallenge'
-import { DataProvider } from './context/DataContext'
+import { DataProvider, useData } from './context/DataContext'
+
+type WorkspaceRole = 'patient' | 'doctor' | 'frontdesk'
 
 /**
- * Normalizes user role string to 'patient' | 'doctor' | 'frontdesk'
+ * Normalizes the server-issued role string to the workspace key.
  */
-function getNormalizedRole(): 'patient' | 'doctor' | 'frontdesk' {
-  const savedUser = localStorage.getItem('clinicops_user')
-  if (savedUser) {
-    try {
-      const parsed = JSON.parse(savedUser)
-      const r = (parsed.role || 'patient').toLowerCase().replace('_', '')
-      if (r.includes('doc')) return 'doctor'
-      if (r.includes('front') || r.includes('recept')) return 'frontdesk'
-      return 'patient'
-    } catch (e) {
-      return 'patient'
-    }
-  }
+function getWorkspaceRole(user: any): WorkspaceRole {
+  const raw = String(user?.role || 'patient').toLowerCase().replace(/[_\s-]/g, '')
+  if (raw.includes('doc')) return 'doctor'
+  if (raw.includes('front') || raw.includes('recept')) return 'frontdesk'
   return 'patient'
 }
 
-/**
- * Role-aware protection component.
- * Blocks unauthorized access across roles and redirects to user's assigned workspace.
- */
-function RoleProtectedRoute({ 
-  children, 
-  allowedRoles 
-}: { 
-  children: React.ReactNode
-  allowedRoles?: Array<'patient' | 'doctor' | 'frontdesk'>
-}) {
-  const token = localStorage.getItem('clinicops_token')
-  const savedUser = localStorage.getItem('clinicops_user')
-  
-  if (!token || !savedUser) {
-    return <Navigate to="/login" replace />
-  }
+function workspacePath(role: WorkspaceRole): string {
+  if (role === 'doctor') return '/doctor/dashboard'
+  if (role === 'frontdesk') return '/frontdesk/dashboard'
+  return '/patient/dashboard'
+}
 
-  const role = getNormalizedRole()
+function StartupScreen({ message }: { message: string }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#F4F8F4] p-6">
+      <div className="text-center">
+        <div className="w-10 h-10 mx-auto mb-4 rounded-full border-2 border-[#1B3E2F] border-t-transparent animate-spin" />
+        <p className="text-sm font-medium text-[#1B3E2F]">{message}</p>
+      </div>
+    </div>
+  )
+}
+
+function ServerUnavailable({ message, onRetry }: { message: string | null; onRetry: () => void }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#F4F8F4] p-6">
+      <div className="w-full max-w-md rounded-3xl border border-[#D5E4D8] bg-white p-8 text-center shadow-sm">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FBE9E7] text-[#B3261E]">
+          <svg viewBox="0 0 24 24" className="h-6 w-6 fill-current">
+            <path d="M12 2 1 21h22L12 2zm1 15h-2v-2h2v2zm0-4h-2V8h2v5z" />
+          </svg>
+        </div>
+        <h1 className="font-serif text-xl font-bold text-[#1B3E2F]">ClinicOps server unavailable</h1>
+        <p className="mt-2 text-xs leading-relaxed text-[#5A6D62]">
+          {message || 'The ClinicOps API could not be reached, so your session cannot be verified.'}
+        </p>
+        <p className="mt-3 rounded-xl bg-[#EFF5EE] p-3 font-mono text-[11px] text-[#3B5347]">
+          Start the backend with: npm run dev
+        </p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-5 w-full rounded-xl bg-[#1B3E2F] py-3 text-xs font-semibold uppercase tracking-wider text-white transition hover:bg-[#143024]"
+        >
+          Retry connection
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Session + role gate for every workspace route. The session is validated
+ * against the backend before any workspace is rendered.
+ */
+function RoleProtectedRoute({
+  children,
+  allowedRoles,
+}: {
+  children: React.ReactNode
+  allowedRoles?: WorkspaceRole[]
+}) {
+  const { user, authStatus, authError, retrySessionCheck } = useData()
+
+  if (authStatus === 'loading') return <StartupScreen message="Verifying your session…" />
+  if (authStatus === 'anonymous') return <Navigate to="/login" replace />
+  if (authStatus === 'unreachable') return <ServerUnavailable message={authError} onRetry={retrySessionCheck} />
+
+  const role = getWorkspaceRole(user)
 
   if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(role)) {
-    // Redirect to the correct role dashboard
-    if (role === 'doctor') {
-      return <Navigate to="/doctor/dashboard" replace />
-    }
-    if (role === 'frontdesk') {
-      return <Navigate to="/frontdesk/dashboard" replace />
-    }
-    return <Navigate to="/patient/dashboard" replace />
+    return <Navigate to={workspacePath(role)} replace />
   }
-  
+
   return <>{children}</>
 }
 
@@ -76,20 +106,13 @@ function RoleProtectedRoute({
  * Directs authenticated users to their specific workspace.
  */
 function WorkspaceRedirect() {
-  const token = localStorage.getItem('clinicops_token')
-  const savedUser = localStorage.getItem('clinicops_user')
-  if (!token || !savedUser) {
-    return <Navigate to="/login" replace />
-  }
+  const { authStatus, authError, user, retrySessionCheck } = useData()
 
-  const role = getNormalizedRole()
-  if (role === 'doctor') {
-    return <Navigate to="/doctor/dashboard" replace />
-  }
-  if (role === 'frontdesk') {
-    return <Navigate to="/frontdesk/dashboard" replace />
-  }
-  return <Navigate to="/patient/dashboard" replace />
+  if (authStatus === 'loading') return <StartupScreen message="Opening your workspace…" />
+  if (authStatus === 'anonymous') return <Navigate to="/login" replace />
+  if (authStatus === 'unreachable') return <ServerUnavailable message={authError} onRetry={retrySessionCheck} />
+
+  return <Navigate to={workspacePath(getWorkspaceRole(user))} replace />
 }
 
 function App() {

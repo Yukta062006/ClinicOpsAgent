@@ -13,9 +13,17 @@ import {
   ArrowRightIcon,
   CheckCircleIcon,
   ArrowTopRightOnSquareIcon,
-  IdentificationIcon
+  IdentificationIcon,
+  ShieldCheckIcon,
+  SpeakerWaveIcon,
+  LanguageIcon,
+  ArrowPathIcon,
+  ArrowDownTrayIcon,
+  QrCodeIcon
 } from '@heroicons/react/24/outline'
 import { useData, Appointment } from '../context/DataContext'
+import { apiAbha, AbhaStatus } from '../utils/api'
+import { announcePatientCalling } from '../utils/speechAnnouncer'
 
 export default function PatientDashboard() {
   const navigate = useNavigate()
@@ -30,8 +38,201 @@ export default function PatientDashboard() {
     cancelAppointment,
     consultations,
     getNextSequentialToken,
-    userPoints
+    userPoints,
+    updatePatient
   } = useData()
+
+  // ABHA Linking modal state for existing patient linking ABHA later
+  const [isLinkAbhaOpen, setIsLinkAbhaOpen] = useState(false)
+  const [linkAbhaNumber, setLinkAbhaNumber] = useState('')
+  const [linkAbhaOtp, setLinkAbhaOtp] = useState('')
+  const [linkAbhaChallengeId, setLinkAbhaChallengeId] = useState('')
+  const [linkMaskedAbha, setLinkMaskedAbha] = useState('')
+  const [linkAbhaStep, setLinkAbhaStep] = useState<'input' | 'otp' | 'success'>('input')
+  const [linkAbhaStatus, setLinkAbhaStatus] = useState<AbhaStatus | null>(null)
+  const [linkAbhaBusy, setLinkAbhaBusy] = useState(false)
+  const [linkAbhaError, setLinkAbhaError] = useState('')
+  const [linkAbhaSuccessMsg, setLinkAbhaSuccessMsg] = useState('')
+  const [linkResendCooldown, setLinkResendCooldown] = useState(0)
+  const [linkResendCount, setLinkResendCount] = useState(0)
+
+  // ABHA Card & QR Code modal state (CRT_ABHA_114 & CRT_ABHA_115)
+  const [isAbhaCardModalOpen, setIsAbhaCardModalOpen] = useState(false)
+  const [abhaCardLoading, setAbhaCardLoading] = useState(false)
+  const [abhaCardBase64, setAbhaCardBase64] = useState<string | null>(null)
+  const [abhaCardMime, setAbhaCardMime] = useState('image/svg+xml')
+  const [abhaQrBase64, setAbhaQrBase64] = useState<string | null>(null)
+  const [abhaQrMime, setAbhaQrMime] = useState('image/svg+xml')
+
+  useEffect(() => {
+    if (linkResendCooldown <= 0) return
+    const timer = setInterval(() => {
+      setLinkResendCooldown((prev) => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [linkResendCooldown])
+
+  useEffect(() => {
+    let isCancelled = false
+    apiAbha.status().then((res) => {
+      if (!isCancelled && res.success && res.data) {
+        setLinkAbhaStatus(res.data)
+      }
+    }).catch(() => {})
+    return () => { isCancelled = true }
+  }, [])
+
+  const formatAbhaInput = (val: string) => {
+    const raw = val.replace(/[^0-9]/g, '').slice(0, 14)
+    let formatted = ''
+    if (raw.length > 0) formatted += raw.slice(0, 2)
+    if (raw.length > 2) formatted += '-' + raw.slice(2, 6)
+    if (raw.length > 6) formatted += '-' + raw.slice(6, 10)
+    if (raw.length > 10) formatted += '-' + raw.slice(10, 14)
+    return formatted || raw
+  }
+
+  const [patientLang, setPatientLang] = useState<'en' | 'hi' | 'mr' | 'bn'>(() => {
+    return currentPatient?.preferredLanguage || 'en'
+  })
+  const [isAnnouncingToken, setIsAnnouncingToken] = useState(false)
+
+  const handleSelectLanguage = (lang: 'en' | 'hi' | 'mr' | 'bn') => {
+    setPatientLang(lang)
+    if (currentPatient) {
+      updatePatient({
+        ...currentPatient,
+        preferredLanguage: lang
+      })
+    }
+  }
+
+  const handleHearToken = () => {
+    setIsAnnouncingToken(true)
+    announcePatientCalling({
+      token: patientQueueItem?.token || 'A-014',
+      patientName: currentPatient?.name || 'Maya',
+      room: patientQueueItem?.room || 'Room 02',
+      language: patientLang,
+      onEnd: () => setIsAnnouncingToken(false)
+    }).finally(() => {
+      setTimeout(() => setIsAnnouncingToken(false), 3000)
+    })
+  }
+
+  const handleRequestLinkOtp = async () => {
+    setLinkAbhaError('')
+    const clean = linkAbhaNumber.replace(/[^0-9]/g, '')
+    if (clean.length !== 14) {
+      setLinkAbhaError('Please enter a valid 14-digit ABHA number (format: XX-XXXX-XXXX-XXXX).')
+      return
+    }
+
+
+
+    setLinkAbhaBusy(true)
+    try {
+      const token = localStorage.getItem('clinicops_token') || ''
+      const res = await apiAbha.requestLinkOtp(token, linkAbhaNumber.trim())
+      if (!res.success || !res.data) {
+        setLinkAbhaError(res.error || 'Failed to request OTP from ABDM.')
+        return
+      }
+      setLinkAbhaChallengeId(res.data.challengeId)
+      setLinkMaskedAbha(res.data.maskedAbha || linkAbhaNumber.trim())
+      setLinkAbhaStep('otp')
+      setLinkResendCooldown(60)
+      setLinkResendCount(0)
+    } catch (err: any) {
+      setLinkAbhaError(err?.message || 'Error communicating with ABDM service.')
+    } finally {
+      setLinkAbhaBusy(false)
+    }
+  }
+
+  const handleResendLinkOtp = async () => {
+    if (linkResendCooldown > 0 || linkResendCount >= 3 || !linkAbhaChallengeId) return
+    setLinkAbhaBusy(true)
+    setLinkAbhaError('')
+    try {
+      const res = await apiAbha.resendOtp(linkAbhaChallengeId)
+      if (res.success && res.data) {
+        setLinkResendCooldown(60)
+        setLinkResendCount(res.data.resendCount)
+      } else {
+        setLinkAbhaError(res.error || 'Failed to resend OTP.')
+      }
+    } catch (err: any) {
+      setLinkAbhaError(err?.message || 'Error communicating with ABDM service.')
+    } finally {
+      setLinkAbhaBusy(false)
+    }
+  }
+
+  const handleOpenAbhaCard = async () => {
+    setIsAbhaCardModalOpen(true)
+    setAbhaCardLoading(true)
+    try {
+      const token = localStorage.getItem('clinicops_token') || ''
+      const [cardRes, qrRes] = await Promise.all([
+        apiAbha.getAbhaCard(token),
+        apiAbha.getAbhaQrCode(token),
+      ])
+      if (cardRes.success && cardRes.data) {
+        setAbhaCardBase64(cardRes.data.cardBase64)
+        setAbhaCardMime(cardRes.data.mimeType || 'image/svg+xml')
+      }
+      if (qrRes.success && qrRes.data) {
+        setAbhaQrBase64(qrRes.data.qrBase64)
+        setAbhaQrMime(qrRes.data.mimeType || 'image/svg+xml')
+      }
+    } catch (err) {
+      console.error('Failed to load ABHA Card', err)
+    } finally {
+      setAbhaCardLoading(false)
+    }
+  }
+
+  const handleDownloadAbhaCard = () => {
+    if (!abhaCardBase64) return
+    const a = document.createElement('a')
+    a.href = `data:${abhaCardMime};base64,${abhaCardBase64}`
+    a.download = `ABHA_Card_${(currentPatient?.name || 'patient').replace(/\s+/g, '_')}.svg`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
+  const handleVerifyLinkOtp = async () => {
+    setLinkAbhaError('')
+    if (!/^\d{6}$/.test(linkAbhaOtp.trim())) {
+      setLinkAbhaError('Please enter the 6-digit OTP sent by ABDM.')
+      return
+    }
+
+    setLinkAbhaBusy(true)
+    try {
+      const token = localStorage.getItem('clinicops_token') || ''
+      const res = await apiAbha.verifyLinkOtp(token, linkAbhaChallengeId, linkAbhaOtp.trim())
+      if (!res.success || !res.data) {
+        setLinkAbhaError(res.error || 'ABDM rejected this OTP. Please try again.')
+        return
+      }
+
+      const verifiedMasked = res.data.abha?.masked || linkAbhaNumber.trim()
+      updatePatient({
+        ...currentPatient,
+        abhaId: verifiedMasked,
+        abhaVerified: true,
+      })
+      setLinkAbhaStep('success')
+      setLinkAbhaSuccessMsg('ABHA account verified and linked to your ClinicOps patient profile!')
+    } catch (err: any) {
+      setLinkAbhaError(err?.message || 'Error verifying OTP.')
+    } finally {
+      setLinkAbhaBusy(false)
+    }
+  }
 
   // Modals state
   const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null)
@@ -187,15 +388,51 @@ export default function PatientDashboard() {
           </p>
         </div>
 
-        {/* Token Pill Box */}
-        <div className="bg-white rounded-2xl p-5 border border-[#D5E4D8] min-w-[190px] text-center shadow-2xs flex-shrink-0">
-          <p className="text-[10px] font-bold text-[#829489] uppercase tracking-wider">YOUR TOKEN</p>
-          <div className="text-4xl font-serif font-bold text-[#1B3E2F] my-1.5 tracking-tight">
-            {patientQueueItem?.token || 'A-014'}
+        {/* Token Pill Box & Preferred Language */}
+        <div className="flex flex-col items-center gap-2">
+          <div className="bg-white rounded-2xl p-5 border border-[#D5E4D8] min-w-[190px] text-center shadow-2xs flex-shrink-0 w-full sm:w-auto">
+            <p className="text-[10px] font-bold text-[#829489] uppercase tracking-wider">YOUR TOKEN</p>
+            <div className="text-4xl font-serif font-bold text-[#1B3E2F] my-1.5 tracking-tight">
+              {patientQueueItem?.token || 'A-014'}
+            </div>
+            <span className="inline-block text-[11px] font-bold text-[#2D5A43] bg-[#EFF5EE] px-3.5 py-1 rounded-full border border-[#D5E4D8] mb-2.5">
+              {patientQueueItem?.status === 'called' ? 'Serving Now' : "You're next"}
+            </span>
+
+            <button
+              type="button"
+              onClick={handleHearToken}
+              disabled={isAnnouncingToken}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-forest-green hover:bg-forest-green/90 text-white text-[11px] font-semibold transition-all shadow-2xs"
+            >
+              <SpeakerWaveIcon className={`w-3.5 h-3.5 ${isAnnouncingToken ? 'animate-pulse text-emerald-200' : ''}`} />
+              <span>{isAnnouncingToken ? 'Announcing...' : 'Hear Call'}</span>
+            </button>
           </div>
-          <span className="inline-block text-[11px] font-bold text-[#2D5A43] bg-[#EFF5EE] px-3.5 py-1 rounded-full border border-[#D5E4D8]">
-            {patientQueueItem?.status === 'called' ? 'Serving Now' : "You're next"}
-          </span>
+
+          {/* Preferred Language Selector */}
+          <div className="bg-white/90 border border-[#D5E4D8] rounded-xl p-1.5 flex items-center gap-1 shadow-2xs w-full justify-center">
+            <span className="text-[10px] font-bold text-text-secondary px-1 uppercase">Voice:</span>
+            {[
+              { key: 'en', label: 'EN' },
+              { key: 'hi', label: 'हिन्दी' },
+              { key: 'mr', label: 'मराठी' },
+              { key: 'bn', label: 'বাংলা' }
+            ].map(l => (
+              <button
+                key={l.key}
+                type="button"
+                onClick={() => handleSelectLanguage(l.key as any)}
+                className={`px-2 py-0.5 text-[11px] font-bold rounded-lg transition-all ${
+                  patientLang === l.key
+                    ? 'bg-forest-green text-white shadow-2xs'
+                    : 'text-stone-600 hover:text-forest-green'
+                }`}
+              >
+                {l.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -724,7 +961,7 @@ export default function PatientDashboard() {
                 <div className="flex justify-between items-start">
                   <div>
                     <h4 className="font-bold text-[#1B3E2F] text-base">{currentPatient.name}</h4>
-                    <p className="text-xs text-[#5A6D62]">DOB: {currentPatient.dateOfBirth} • Age: {currentPatient.age} yrs • Blood Group: {currentPatient.bloodGroup || 'O+'}</p>
+                    <p className="text-xs text-[#5A6D62]">DOB: {currentPatient.dateOfBirth} • Age: {currentPatient.age} yrs • Blood Group: {currentPatient.bloodGroup || 'Not recorded'}</p>
                   </div>
                   <span className="text-xs font-mono font-bold bg-white text-[#1B3E2F] px-2.5 py-1 rounded-lg border border-[#E2ECE4]">
                     {currentPatient.gender}
@@ -733,19 +970,71 @@ export default function PatientDashboard() {
                 <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-[#E2ECE4] text-xs">
                   <div>
                     <span className="text-[#829489] block">ABHA Number</span>
-                    <span className="font-mono font-bold text-[#1E2D25]">{currentPatient.abhaId || '91-4821-7290-3412'}</span>
+                    <span className="font-mono font-bold text-[#1E2D25]">{currentPatient.abhaId || 'Not provided'}</span>
+                    <span className={`block text-[10px] mt-0.5 font-bold ${currentPatient.abhaVerified ? 'text-emerald-700' : 'text-amber-800'}`}>
+                      {currentPatient.abhaVerified ? '✓ Verified with ABDM' : (currentPatient.abhaId ? '⚠ Not verified' : '⚪ Not linked')}
+                    </span>
+                    {currentPatient.abhaVerified ? (
+                      <button
+                        onClick={handleOpenAbhaCard}
+                        className="mt-1 text-[11px] font-bold text-forest-green hover:underline hover:text-emerald-700 block cursor-pointer inline-flex items-center gap-1"
+                      >
+                        <IdentificationIcon className="w-3.5 h-3.5" />
+                        View ABHA Card &amp; QR
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setLinkAbhaNumber(currentPatient.abhaId || '')
+                          setLinkAbhaStep('input')
+                          setLinkAbhaError('')
+                          setLinkAbhaSuccessMsg('')
+                          setIsLinkAbhaOpen(true)
+                        }}
+                        className="mt-1 text-[11px] font-bold text-forest-green underline hover:text-emerald-700 block cursor-pointer"
+                      >
+                        {currentPatient.abhaId ? 'Verify with ABDM OTP' : '+ Link ABHA Account'}
+                      </button>
+                    )}
                   </div>
                   <div>
                     <span className="text-[#829489] block">Aadhaar (Masked)</span>
-                    <span className="font-mono font-bold text-[#1E2D25]">{currentPatient.aadhaar || 'XXXX-XXXX-4912'}</span>
+                    <span className="font-mono font-bold text-[#1E2D25]">{currentPatient.aadhaar || 'Not provided'}</span>
                   </div>
                   <div>
                     <span className="text-[#829489] block">PAN Number</span>
-                    <span className="font-mono font-bold text-[#1E2D25]">{currentPatient.pan || 'AAAPT4912K'}</span>
+                    <span className="font-mono font-bold text-[#1E2D25]">{currentPatient.pan || 'Not provided'}</span>
                   </div>
                   <div>
                     <span className="text-[#829489] block">Emergency Contact</span>
-                    <span className="font-medium text-[#1E2D25]">{currentPatient.emergencyContact || '+91 98201 99887'}</span>
+                    <span className="font-medium text-[#1E2D25]">{currentPatient.emergencyContact || 'Not provided'}</span>
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-3 border-t border-[#E2ECE4]">
+                  <span className="text-[#829489] block text-xs font-semibold mb-1.5">
+                    Preferred Voice & Read-Aloud Language
+                  </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    {[
+                      { key: 'en', label: 'English' },
+                      { key: 'hi', label: 'हिन्दी' },
+                      { key: 'mr', label: 'मराठी' },
+                      { key: 'bn', label: 'বাংলা' }
+                    ].map(l => (
+                      <button
+                        key={l.key}
+                        type="button"
+                        onClick={() => handleSelectLanguage(l.key as any)}
+                        className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all text-center ${
+                          patientLang === l.key
+                            ? 'bg-forest-green text-white border-forest-green shadow-xs'
+                            : 'bg-white text-stone-700 border-[#E2ECE4] hover:border-forest-green'
+                        }`}
+                      >
+                        {l.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -833,6 +1122,272 @@ export default function PatientDashboard() {
                   </button>
                 </div>
               </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Link / Verify ABHA Modal */}
+      {isLinkAbhaOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl border border-[#E2ECE4] w-full max-w-md p-6">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E2ECE4] mb-4">
+              <div className="flex items-center gap-2">
+                <ShieldCheckIcon className="w-5 h-5 text-forest-green" />
+                <div>
+                  <h3 className="font-serif font-bold text-base text-[#1B3E2F]">Link & Verify ABHA</h3>
+                  <p className="text-[11px] text-[#5A6D62]">National Digital Health Mission (ABDM)</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsLinkAbhaOpen(false)
+                  setLinkAbhaStep('input')
+                  setLinkAbhaError('')
+                }}
+                className="cursor-pointer"
+              >
+                <XMarkIcon className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+
+            {linkAbhaStep === 'success' ? (
+              <div className="py-6 text-center space-y-3">
+                <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center mx-auto">
+                  <CheckCircleIcon className="w-6 h-6 text-emerald-700" />
+                </div>
+                <h4 className="font-serif font-bold text-base text-[#1B3E2F]">ABHA Verified & Linked</h4>
+                <p className="text-xs text-[#5A6D62] leading-relaxed">
+                  {linkAbhaSuccessMsg || 'Your ABHA identity has been verified via ABDM and linked to your patient profile.'}
+                </p>
+                <button
+                  onClick={() => setIsLinkAbhaOpen(false)}
+                  className="w-full py-2.5 bg-forest-green text-white rounded-xl text-xs font-bold hover:bg-forest-green/90"
+                >
+                  Done
+                </button>
+              </div>
+            ) : linkAbhaStep === 'otp' ? (
+              <div className="space-y-4">
+                <div className="p-3 bg-[#EFF5EE] rounded-xl border border-[#E2ECE4]">
+                  <p className="text-xs font-bold text-forest-green">OTP Verification</p>
+                  <p className="text-[11px] text-[#5A6D62] mt-0.5">
+                    ABDM sent a 6-digit OTP to the mobile registered against <strong>{linkMaskedAbha}</strong>.
+                  </p>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-stone-800">Enter 6-Digit OTP</label>
+                    <button
+                      type="button"
+                      onClick={() => setLinkAbhaOtp('123456')}
+                      className="text-[10px] text-forest-green font-bold hover:underline"
+                    >
+                      Autofill test OTP (123456)
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={linkAbhaOtp}
+                    onChange={(e) => setLinkAbhaOtp(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                    placeholder="••••••"
+                    className="w-full px-4 py-2.5 rounded-xl border border-stone-200 font-mono tracking-[0.4em] text-sm text-stone-800 text-center focus:outline-hidden focus:border-forest-green"
+                  />
+                  <div className="flex items-center justify-between text-[11px] pt-1">
+                    <span className="text-[#5A6D62]">
+                      {linkResendCooldown > 0 ? (
+                        `Resend OTP in ${linkResendCooldown}s`
+                      ) : linkResendCount >= 3 ? (
+                        <span className="text-amber-800 font-semibold">Resend limit reached (3/3)</span>
+                      ) : (
+                        `Resends left: ${3 - linkResendCount}`
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleResendLinkOtp}
+                      disabled={linkAbhaBusy || linkResendCooldown > 0 || linkResendCount >= 3}
+                      className="font-semibold text-forest-green hover:underline disabled:opacity-40 disabled:no-underline cursor-pointer flex items-center gap-1"
+                    >
+                      <ArrowPathIcon className={`w-3.5 h-3.5 ${linkAbhaBusy ? 'animate-spin' : ''}`} />
+                      Resend OTP
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-emerald-800 font-semibold mt-1">
+                    📱 Sandbox mode active: no SMS is sent to physical phone. Use OTP 123456.
+                  </p>
+                </div>
+
+                {linkAbhaError && (
+                  <p className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2.5">
+                    {linkAbhaError}
+                  </p>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleVerifyLinkOtp}
+                    disabled={linkAbhaBusy || linkAbhaOtp.length !== 6}
+                    className="flex-1 py-2.5 bg-forest-green text-white rounded-xl text-xs font-bold hover:bg-forest-green/90 disabled:opacity-50"
+                  >
+                    {linkAbhaBusy ? 'Verifying OTP…' : 'Verify & Link ABHA'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setLinkAbhaStep('input')
+                      setLinkAbhaOtp('')
+                      setLinkAbhaError('')
+                    }}
+                    className="px-4 py-2.5 border border-stone-200 text-stone-600 rounded-xl text-xs font-semibold hover:bg-stone-50"
+                  >
+                    Back
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {linkAbhaStatus && !linkAbhaStatus.configured && linkAbhaStatus.environment === 'production' && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 leading-relaxed">
+                    <p className="font-bold mb-0.5">ABDM Verification Unavailable</p>
+                    <p>
+                      This server is missing credentials (<span className="font-mono">{linkAbhaStatus.missing.join(', ')}</span>).
+                    </p>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-800 mb-1">14-Digit ABHA Number</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={linkAbhaNumber}
+                    onChange={(e) => setLinkAbhaNumber(formatAbhaInput(e.target.value))}
+                    placeholder="XX-XXXX-XXXX-XXXX"
+                    className="w-full px-3 py-2.5 rounded-xl border border-stone-200 font-mono text-xs text-stone-800 focus:outline-hidden focus:border-forest-green"
+                  />
+                  <p className="text-[10px] text-[#5A6D62] mt-1">
+                    ABDM will send an Aadhaar OTP to your registered phone to confirm ownership.
+                    {linkAbhaStatus?.environment === 'sandbox' && (
+                      <span className="block mt-0.5 text-emerald-800 font-semibold">
+                        💡 Sandbox active: use OTP <span className="font-mono font-bold">123456</span> to verify.
+                      </span>
+                    )}
+                  </p>
+                </div>
+
+                {linkAbhaError && (
+                  <p className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2.5">
+                    {linkAbhaError}
+                  </p>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleRequestLinkOtp}
+                    disabled={linkAbhaBusy || linkAbhaNumber.replace(/[^0-9]/g, '').length !== 14}
+                    className="flex-1 py-2.5 bg-forest-green text-white rounded-xl text-xs font-bold hover:bg-forest-green/90 disabled:opacity-50"
+                  >
+                    {linkAbhaBusy ? 'Requesting OTP…' : 'Send ABDM OTP'}
+                  </button>
+                  <button
+                    onClick={() => setIsLinkAbhaOpen(false)}
+                    className="px-4 py-2.5 border border-stone-200 text-stone-600 rounded-xl text-xs font-semibold hover:bg-stone-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ABHA Digital Health Card & Scan & Share Modal (CRT_ABHA_114 & CRT_ABHA_115) */}
+      {isAbhaCardModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl border border-[#E2ECE4] w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E2ECE4] mb-4">
+              <div className="flex items-center gap-2">
+                <IdentificationIcon className="w-5 h-5 text-forest-green" />
+                <div>
+                  <h3 className="font-serif font-bold text-base text-[#1B3E2F]">Ayushman Bharat Health Account</h3>
+                  <p className="text-[11px] text-[#5A6D62]">National Health Authority • Verified Digital Health ID</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAbhaCardModalOpen(false)}
+                className="cursor-pointer text-stone-400 hover:text-stone-600"
+              >
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            {abhaCardLoading ? (
+              <div className="py-12 text-center space-y-3">
+                <ArrowPathIcon className="w-8 h-8 text-forest-green animate-spin mx-auto" />
+                <p className="text-xs text-[#5A6D62]">Retrieving official ABHA card &amp; QR credentials from ABDM…</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Official ABHA Card Presentation */}
+                {abhaCardBase64 ? (
+                  <div className="rounded-2xl overflow-hidden border border-emerald-300 shadow-md bg-stone-900 flex items-center justify-center p-2">
+                    <img
+                      src={`data:${abhaCardMime};base64,${abhaCardBase64}`}
+                      alt="ABHA Card"
+                      className="w-full max-w-[420px] rounded-xl object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-300 text-center">
+                    <p className="font-mono font-bold text-forest-green text-sm">{currentPatient?.abhaId}</p>
+                    <p className="text-xs text-stone-600 mt-1">{currentPatient?.name}</p>
+                  </div>
+                )}
+
+                {/* Scan & Share OPD Counter Fast Check-in (CRT_ABHA_114/115) */}
+                <div className="p-3.5 bg-[#EFF5EE] rounded-2xl border border-[#E2ECE4] flex items-center gap-4">
+                  {abhaQrBase64 ? (
+                    <img
+                      src={`data:${abhaQrMime};base64,${abhaQrBase64}`}
+                      alt="ABHA Scan & Share QR"
+                      className="w-20 h-20 bg-white p-1 rounded-xl border border-stone-200 object-contain shadow-xs shrink-0"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 bg-white rounded-xl border border-stone-200 flex items-center justify-center shrink-0">
+                      <QrCodeIcon className="w-10 h-10 text-stone-400" />
+                    </div>
+                  )}
+                  <div className="text-xs">
+                    <p className="font-bold text-[#1B3E2F] flex items-center gap-1.5">
+                      <QrCodeIcon className="w-4 h-4 text-forest-green" />
+                      <span>ABDM Scan &amp; Share Fast Check-in</span>
+                    </p>
+                    <p className="text-[11px] text-[#5A6D62] mt-0.5 leading-relaxed">
+                      Scan this QR code at hospital OPD reception counters to automatically share your token and demography details without paper registration.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={handleDownloadAbhaCard}
+                    className="flex-1 py-2.5 bg-forest-green text-white rounded-xl text-xs font-bold hover:bg-forest-green/90 inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <ArrowDownTrayIcon className="w-4 h-4" />
+                    Download ABHA Card
+                  </button>
+                  <button
+                    onClick={() => setIsAbhaCardModalOpen(false)}
+                    className="px-4 py-2.5 border border-stone-200 text-stone-600 rounded-xl text-xs font-semibold hover:bg-stone-50 cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>

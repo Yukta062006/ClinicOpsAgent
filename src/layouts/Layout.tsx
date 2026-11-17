@@ -64,15 +64,14 @@ export default function Layout({ children }: LayoutProps) {
 
   const { 
     user, 
-    setUser, 
+    signOut, 
     soundEnabled, 
     toggleSound, 
     activeClinic, 
     setActiveClinic,
     patients,
     appointments,
-    queue,
-    currentPatient
+    queue
   } = useData()
 
   // Normalize role
@@ -100,12 +99,10 @@ export default function Layout({ children }: LayoutProps) {
   }, [])
 
   const handleLogout = () => {
-    localStorage.removeItem('clinicops_token')
-    localStorage.removeItem('clinicops_user')
-    setUser(null)
+    signOut()
     setIsProfileMenuOpen(false)
     setIsSidebarOpen(false)
-    window.location.href = '/login'
+    navigate('/login', { replace: true })
   }
 
   // Define role-specific navigation groups matching strict architectural separation
@@ -180,7 +177,7 @@ export default function Layout({ children }: LayoutProps) {
   const filteredSearchItems = [
     ...patients.map(p => ({
       title: p.name,
-      subtitle: `Patient • ABHA: ${p.abhaId || 'Verified'} • Phone: ${p.phone}`,
+      subtitle: `Patient • ABHA: ${p.abhaId || 'Not provided'} • Phone: ${p.phone}`,
       path: currentRole === 'patient' ? '/patient/dashboard' : (currentRole === 'doctor' ? '/doctor/dashboard' : '/frontdesk/dashboard'),
       category: 'Patients'
     })),
@@ -192,7 +189,7 @@ export default function Layout({ children }: LayoutProps) {
     })),
     ...(currentRole === 'patient' ? [
       { title: 'Balanced Eating Challenge', subtitle: 'Interactive Health Quiz • 5 questions', path: '/patient/health-games', category: 'Engagement' },
-      { title: 'Travel Planner - City General Hospital', subtitle: 'Directions, parking, routes & transit', path: '/patient/travel-planner', category: 'Engagement' },
+      { title: 'Travel Planner & Hospital Maps', subtitle: 'Search hospitals, routes, directions & transit', path: '/patient/travel-planner', category: 'Engagement' },
       { title: 'Diabetes Education Hub', subtitle: 'Medical research & verified video guides', path: '/patient/medical-videos', category: 'Engagement' }
     ] : [])
   ].filter(item => 
@@ -471,7 +468,7 @@ export default function Layout({ children }: LayoutProps) {
                         <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0"></div>
                         <div>
                           <p className="text-xs font-bold text-[#1E2D25]">Ayushman Bharat Digital Health</p>
-                          <p className="text-[11px] text-[#5A6D62] mt-0.5">ABHA ID linking verified with National Health Authority.</p>
+                          <p className="text-[11px] text-[#5A6D62] mt-0.5">ABHA numbers are verified live through ABDM. Patients without a verified ABHA can still register.</p>
                         </div>
                       </div>
                     </div>
@@ -630,7 +627,7 @@ export default function Layout({ children }: LayoutProps) {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#5A6D62]">Contact Number:</span>
-                  <span className="font-bold text-[#1E2D25]">{user?.phone || '+91 98201 45892'}</span>
+                  <span className="font-bold text-[#1E2D25]">{user?.phone || 'Not provided'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#5A6D62]">Account Role:</span>
@@ -640,47 +637,47 @@ export default function Layout({ children }: LayoutProps) {
 
               {currentRole === 'patient' && (
                 <div className="p-3 bg-[#EFF5EE] border border-[#E2ECE4] rounded-2xl space-y-2">
-                  <div className="flex justify-between">
+                  <div className="flex justify-between gap-3">
                     <span className="text-[#5A6D62]">Ayushman Bharat ABHA ID:</span>
-                    <span className="font-bold text-emerald-800">{user?.abhaId || currentPatient.abhaId || '91-4523-8890-1234'}</span>
+                    <span className="font-bold text-emerald-800 text-right">
+                      {user?.abhaId || 'Not provided'}
+                    </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#5A6D62]">Aadhaar (Masked):</span>
-                    <span className="font-bold text-[#1E2D25]">XXXX-XXXX-4912</span>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-[#5A6D62]">ABHA Verification:</span>
+                    <span className={`font-bold text-right ${user?.abhaVerified ? 'text-emerald-800' : 'text-amber-700'}`}>
+                      {user?.abhaVerified ? 'Verified with ABDM' : 'Not verified'}
+                    </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#5A6D62]">Primary Physician:</span>
-                    <span className="font-bold text-[#1E2D25]">Dr. Elena Cooper (Family Medicine)</span>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-[#5A6D62]">Aadhaar:</span>
+                    <span className="font-bold text-[#1E2D25] text-right">{user?.aadhaar || 'Not provided'}</span>
                   </div>
                 </div>
               )}
 
               {currentRole === 'doctor' && (
                 <div className="p-3 bg-[#EFF5EE] border border-[#E2ECE4] rounded-2xl space-y-2">
-                  <div className="flex justify-between">
+                  <div className="flex justify-between gap-3">
                     <span className="text-[#5A6D62]">Specialization:</span>
-                    <span className="font-bold text-[#1E2D25]">Family & General Medicine</span>
+                    <span className="font-bold text-[#1E2D25] text-right">{user?.specialty || 'Not recorded'}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#5A6D62]">Assigned Consultation Room:</span>
-                    <span className="font-bold text-emerald-800">Room 02 (Ground Floor)</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#5A6D62]">Medical Council Reg:</span>
-                    <span className="font-bold text-[#1E2D25]">MCI-MH-48201</span>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-[#5A6D62]">Department / Room:</span>
+                    <span className="font-bold text-[#1E2D25] text-right">{user?.department || 'Not assigned'}</span>
                   </div>
                 </div>
               )}
 
               {currentRole === 'frontdesk' && (
                 <div className="p-3 bg-[#EFF5EE] border border-[#E2ECE4] rounded-2xl space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-[#5A6D62]">Desk Terminal:</span>
-                    <span className="font-bold text-emerald-800">Terminal 01 • Main Reception</span>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-[#5A6D62]">Assigned Desk:</span>
+                    <span className="font-bold text-emerald-800 text-right">{user?.department || 'Reception'}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#5A6D62]">Staff Operator ID:</span>
-                    <span className="font-bold text-[#1E2D25]">STF-MUM-104</span>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-[#5A6D62]">Active Clinic:</span>
+                    <span className="font-bold text-[#1E2D25] text-right">{activeClinic}</span>
                   </div>
                 </div>
               )}
