@@ -10,7 +10,8 @@ import {
   BuildingOffice2Icon,
   BeakerIcon,
   IdentificationIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline'
 import { useData } from '../context/DataContext'
 import { apiAbha, AbhaStatus } from '../utils/api'
@@ -46,6 +47,16 @@ export default function Login() {
   const [maskedAbha, setMaskedAbha] = useState('')
   const [abhaStatus, setAbhaStatus] = useState<AbhaStatus | null>(null)
   const [notLinkedAbha, setNotLinkedAbha] = useState('')
+  const [resendCooldown, setResendCooldown] = useState(0)
+  const [resendCount, setResendCount] = useState(0)
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [resendCooldown])
 
   const navigate = useNavigate()
   const { signIn, requestAbhaLoginOtp, signInWithAbha, authStatus, user } = useData()
@@ -83,6 +94,8 @@ export default function Login() {
     setAbhaOtp('')
     setMaskedAbha('')
     setNotLinkedAbha('')
+    setResendCooldown(0)
+    setResendCount(0)
     setError('')
     setSuccessMsg('')
   }
@@ -108,7 +121,27 @@ export default function Login() {
       setMaskedAbha(response.data.maskedAbha || abhaNumber.trim())
       setAbhaStep('verify')
       setAbhaOtp('')
+      setResendCooldown(60)
+      setResendCount(0)
       setSuccessMsg(response.data.message || 'An ABDM OTP was requested. Enter the 6-digit code to continue.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleResendAbhaOtp = async () => {
+    if (resendCooldown > 0 || resendCount >= 3 || !abhaChallengeId) return
+    setIsLoading(true)
+    setError('')
+    try {
+      const response = await apiAbha.resendOtp(abhaChallengeId)
+      if (response.success && response.data) {
+        setResendCooldown(60)
+        setResendCount(response.data.resendCount)
+        setSuccessMsg(response.data.message || 'A fresh OTP has been sent to your registered mobile.')
+      } else {
+        setError(response.error || 'Failed to resend OTP.')
+      }
     } finally {
       setIsLoading(false)
     }
@@ -472,6 +505,26 @@ export default function Login() {
                         placeholder="••••••"
                         className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] font-mono tracking-[0.4em] text-sm text-stone-800 focus:outline-hidden focus:border-forest-green focus:bg-white"
                       />
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] pt-1">
+                      <span className="text-[#5A6D62]">
+                        {resendCooldown > 0 ? (
+                          `Resend OTP in ${resendCooldown}s`
+                        ) : resendCount >= 3 ? (
+                          <span className="text-amber-800 font-semibold">Resend limit reached (3/3)</span>
+                        ) : (
+                          `Resends left: ${3 - resendCount}`
+                        )}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleResendAbhaOtp}
+                        disabled={isLoading || resendCooldown > 0 || resendCount >= 3}
+                        className="font-semibold text-forest-green hover:underline disabled:opacity-40 disabled:no-underline cursor-pointer flex items-center gap-1"
+                      >
+                        <ArrowPathIcon className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                        Resend ABDM OTP
+                      </button>
                     </div>
                   </div>
                   <button

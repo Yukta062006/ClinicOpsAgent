@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { validateAadhaar } from './verhoeff.mjs';
 
 /**
  * ABDM ABHA V3 client (Milestone 1).
@@ -429,17 +430,48 @@ export function createAbdmClient({ env = process.env, fetchImpl = globalThis.fet
       };
     },
 
-    /** Sends an Aadhaar OTP for creating a new ABHA. */
-    async requestEnrollmentOtp({ aadhaarNumber }) {
+    /** Resends an OTP for an ongoing transaction (Aadhaar or Mobile). */
+    async resendOtp({ txnId, purpose = 'enroll' }) {
       const { clientId } = getConfig();
       if (isSandboxSimulator(clientId)) {
-        const clean = digits(aadhaarNumber);
-        if (clean.length !== 12) {
-          throw new AbdmError('Aadhaar number must be 12 digits.', {
-            status: 400,
-            code: 'ABDM_INVALID_AADHAAR',
-          });
-        }
+        return {
+          txnId,
+          message: 'A fresh OTP has been sent. (Sandbox test OTP: 123456)',
+        };
+      }
+      let endpoint = '/v3/enrollment/request/resendOtp';
+      if (purpose === 'login' || purpose === 'verify' || purpose === 'link') {
+        endpoint = '/v3/profile/login/resendOtp';
+      }
+      const payload = await abhaRequest(endpoint, {
+        method: 'POST',
+        body: { txnId },
+      }).catch(async () => {
+        // Fallback to enrollment request retry endpoint if resendOtp endpoint is different in standard ABDM v3 gateway
+        return await abhaRequest('/v3/enrollment/request/otp', {
+          method: 'POST',
+          body: { txnId },
+        });
+      });
+      return {
+        txnId: String(payload?.txnId || txnId),
+        message: payload?.message || 'A fresh OTP has been dispatched to your mobile.',
+      };
+    },
+
+    /** Sends an Aadhaar OTP for creating a new ABHA. */
+    async requestEnrollmentOtp({ aadhaarNumber }) {
+      const { clientId, environment } = getConfig();
+      const isSim = isSandboxSimulator(clientId);
+      const vResult = validateAadhaar(aadhaarNumber, { allowDeveloperDemo: isSim || environment !== 'production' });
+      if (!vResult.valid) {
+        throw new AbdmError(vResult.error || 'Invalid Aadhaar number.', {
+          status: 400,
+          code: 'ABDM_INVALID_AADHAAR',
+        });
+      }
+      const clean = vResult.clean;
+      if (isSim) {
         const txnId = 'sbx-enrol-' + crypto.randomUUID().slice(0, 8);
         sandboxTxnStore.set(txnId, { aadhaar: clean, purpose: 'enroll', createdAt: Date.now() });
         return {
@@ -448,7 +480,7 @@ export function createAbdmClient({ env = process.env, fetchImpl = globalThis.fet
         };
       }
 
-      const loginId = await encrypt(String(aadhaarNumber).replace(/\D/g, ''));
+      const loginId = await encrypt(clean);
       const clientTxnId = crypto.randomUUID();
       const payload = await abhaRequest('/v3/enrollment/request/otp', {
         method: 'POST',
@@ -468,7 +500,7 @@ export function createAbdmClient({ env = process.env, fetchImpl = globalThis.fet
     },
 
     /** Creates (or returns) an ABHA after Aadhaar OTP verification. */
-    async verifyEnrollment({ txnId, otp }) {
+    async verifyEnrollment({ txnId, otp, preferredAbhaAddress = null, consentVersion = '1.4' }) {
       const { clientId } = getConfig();
       if (isSandboxSimulator(clientId)) {
         const session = sandboxTxnStore.get(txnId);
@@ -490,11 +522,14 @@ export function createAbdmClient({ env = process.env, fetchImpl = globalThis.fet
         const rnd2 = Math.floor(1000 + Math.random() * 9000);
         const rnd3 = Math.floor(1000 + Math.random() * 9000);
         const newAbha = `91-${rnd1}-${rnd2}-${rnd3}`;
+        const finalAbhaAddress = preferredAbhaAddress
+          ? (preferredAbhaAddress.includes('@') ? preferredAbhaAddress : `${preferredAbhaAddress}@sbx`)
+          : `patient${rnd1}@sbx`;
         return {
           isNew: true,
           profile: {
             abhaNumber: newAbha,
-            abhaAddress: `patient${rnd1}@sbx`,
+            abhaAddress: finalAbhaAddress,
             name: 'New Verified Patient',
           },
           message: 'ABHA successfully created and verified via ABDM Sandbox.',
@@ -503,15 +538,19 @@ export function createAbdmClient({ env = process.env, fetchImpl = globalThis.fet
       }
 
       const otpValue = await encrypt(otp);
+      const body = {
+        authData: {
+          authMethods: ['otp'],
+          otp: { txnId, otpValue },
+        },
+        consent: { code: 'abha-enrollment', version: consentVersion || '1.4' },
+      };
+      if (preferredAbhaAddress) {
+        body.preferredAbhaAddress = preferredAbhaAddress;
+      }
       const payload = await abhaRequest('/v3/enrollment/enrol/byAadhaar', {
         method: 'POST',
-        body: {
-          authData: {
-            authMethods: ['otp'],
-            otp: { txnId, otpValue },
-          },
-          consent: { code: 'abha-enrollment', version: '1.4' },
-        },
+        body,
       });
 
       return {
@@ -519,6 +558,205 @@ export function createAbdmClient({ env = process.env, fetchImpl = globalThis.fet
         isNew: payload?.isNew ?? null,
         message: payload?.message || null,
         raw: payload,
+      };
+    },
+
+    /** Returns suggested ABHA addresses for a transaction. */
+    async getAbhaAddressSuggestions({ txnId }) {
+      const { clientId } = getConfig();
+      if (isSandboxSimulator(clientId)) {
+        const base = 'patient' + Math.floor(100 + Math.random() * 900);
+        return {
+          suggestions: [
+            `${base}@sbx`,
+            `${base}.health@sbx`,
+            `${base}.care@sbx`,
+            `care.${base}@sbx`,
+          ],
+        };
+      }
+      const payload = await abhaRequest(`/v3/enrollment/enrol/suggestion?txnId=${encodeURIComponent(txnId)}`, {
+        method: 'GET',
+      }).catch(async () => {
+        return await abhaRequest('/v3/enrollment/suggestion/abha-address', {
+          method: 'POST',
+          body: { txnId },
+        });
+      });
+      const suggestions = payload?.abhaAddressList || payload?.suggestions || (Array.isArray(payload) ? payload : []);
+      return { suggestions };
+    },
+
+    /** Checks whether an ABHA address is available. */
+    async checkAbhaAddressAvailability({ abhaAddress }) {
+      const { clientId } = getConfig();
+      if (isSandboxSimulator(clientId)) {
+        const clean = String(abhaAddress || '').trim().toLowerCase();
+        const valid = /^[a-zA-Z0-9._]{3,30}(@[a-zA-Z0-9]+)?$/.test(clean);
+        return {
+          available: valid && !clean.startsWith('taken') && !clean.startsWith('admin'),
+          abhaAddress: clean,
+          message: valid ? 'ABHA address is available.' : 'Invalid ABHA address format.',
+        };
+      }
+      const payload = await abhaRequest('/v3/enrollment/check/abha-address', {
+        method: 'POST',
+        body: { abhaAddress },
+      });
+      return {
+        available: payload?.status === true,
+        abhaAddress,
+        message: payload?.message || (payload?.status === true ? 'Available' : 'Already in use'),
+      };
+    },
+
+    /** Requests OTP for alternate communication mobile verification. */
+    async requestMobileOtp({ txnId, mobileNumber }) {
+      const { clientId } = getConfig();
+      const cleanMobile = String(mobileNumber || '').replace(/\D/g, '');
+      if (cleanMobile.length !== 10) {
+        throw new AbdmError('Mobile number must be 10 digits.', { status: 400, code: 'ABDM_INVALID_MOBILE' });
+      }
+      if (isSandboxSimulator(clientId)) {
+        const mTxnId = 'sbx-mob-' + crypto.randomUUID().slice(0, 8);
+        sandboxTxnStore.set(mTxnId, { mobile: cleanMobile, parentTxnId: txnId, createdAt: Date.now() });
+        return {
+          txnId: mTxnId,
+          message: `OTP sent to mobile ****${cleanMobile.slice(-4)}. (Sandbox test OTP: 123456)`,
+        };
+      }
+      const loginId = await encrypt(cleanMobile);
+      const payload = await abhaRequest('/v3/enrollment/request/otp', {
+        method: 'POST',
+        body: {
+          txnId,
+          scope: ['abha-enrol', 'mobile-verify'],
+          loginHint: 'mobile',
+          loginId,
+          otpSystem: 'abdm',
+        },
+      });
+      return {
+        txnId: String(payload?.txnId || txnId),
+        message: payload?.message || 'OTP sent to communication mobile.',
+      };
+    },
+
+    /** Verifies OTP for alternate communication mobile. */
+    async verifyMobileOtp({ txnId, otp }) {
+      const { clientId } = getConfig();
+      if (isSandboxSimulator(clientId)) {
+        if (otp !== '123456' && otp !== '111111') {
+          throw new AbdmError('Invalid mobile OTP. Enter 123456 for sandbox testing.', {
+            status: 400,
+            code: 'ABDM_INVALID_OTP',
+          });
+        }
+        return { success: true, message: 'Communication mobile verified via Sandbox.' };
+      }
+      const otpValue = await encrypt(otp);
+      const payload = await abhaRequest('/v3/enrollment/auth/byMobile', {
+        method: 'POST',
+        body: {
+          authData: {
+            authMethods: ['otp'],
+            otp: { txnId, otpValue },
+          },
+        },
+      });
+      return { success: true, message: payload?.message || 'Mobile successfully verified.' };
+    },
+
+    /** Retrieves official ABHA profile details using X-Token. */
+    async getProfile({ token }) {
+      const { clientId } = getConfig();
+      if (isSandboxSimulator(clientId)) {
+        return {
+          abhaNumber: '91-6166-1670-1721',
+          abhaAddress: 'yukta.thakur@sbx',
+          name: 'Yukta Ravindra Thakur',
+          gender: 'Female',
+          dateOfBirth: '1998-07-14',
+          yearOfBirth: '1998',
+          monthOfBirth: '07',
+          dayOfBirth: '14',
+          address: '123 Marine Drive, Mumbai 400020',
+          pincode: '400020',
+          stateName: 'Maharashtra',
+          districtName: 'Mumbai',
+          mobile: '9820199887',
+          email: 'patient@clinicops.com',
+          profilePhoto: null,
+          status: 'ACTIVE',
+        };
+      }
+      const payload = await abhaRequest('/v3/profile/account', {
+        method: 'GET',
+        extraHeaders: { 'X-Token': `Bearer ${token}` },
+      });
+      return payload;
+    },
+
+    /** Retrieves ABHA Card (SVG/PNG/PDF base64) using X-Token. */
+    async getAbhaCard({ token }) {
+      const { clientId } = getConfig();
+      if (isSandboxSimulator(clientId)) {
+        const svgCard = `
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="240" viewBox="0 0 400 240">
+  <rect width="100%" height="100%" rx="16" fill="#1B3E2F"/>
+  <rect x="8" y="8" width="384" height="224" rx="12" fill="#FFFFFF" fill-opacity="0.05" stroke="#4ade80" stroke-width="1.5"/>
+  <text x="24" y="38" fill="#4ade80" font-family="sans-serif" font-size="14" font-weight="bold">NATIONAL HEALTH AUTHORITY</text>
+  <text x="24" y="56" fill="#E2ECE4" font-family="sans-serif" font-size="10">Ayushman Bharat Digital Mission (ABDM)</text>
+  <text x="24" y="96" fill="#A7D7C5" font-family="sans-serif" font-size="11">Name</text>
+  <text x="24" y="116" fill="#FFFFFF" font-family="sans-serif" font-size="15" font-weight="bold">Yukta Ravindra Thakur</text>
+  <text x="24" y="146" fill="#A7D7C5" font-family="sans-serif" font-size="11">ABHA Number</text>
+  <text x="24" y="166" fill="#4ade80" font-family="monospace" font-size="16" font-weight="bold">91-6166-1670-1721</text>
+  <text x="24" y="196" fill="#A7D7C5" font-family="sans-serif" font-size="11">ABHA Address</text>
+  <text x="24" y="214" fill="#E2ECE4" font-family="monospace" font-size="13">yukta.thakur@sbx</text>
+  <rect x="290" y="85" width="85" height="85" rx="8" fill="#FFFFFF"/>
+  <rect x="300" y="95" width="65" height="65" fill="#1B3E2F"/>
+  <text x="312" y="132" fill="#4ade80" font-family="monospace" font-size="10" font-weight="bold">ABDM</text>
+  <text x="310" y="146" fill="#FFFFFF" font-family="sans-serif" font-size="8">QR CODE</text>
+</svg>`.trim();
+        return {
+          cardBase64: Buffer.from(svgCard).toString('base64'),
+          mimeType: 'image/svg+xml',
+        };
+      }
+      const payload = await abhaRequest('/v3/profile/account/abha-card', {
+        method: 'GET',
+        extraHeaders: { 'X-Token': `Bearer ${token}` },
+      });
+      return {
+        cardBase64: payload?.data || payload?.card || null,
+        mimeType: payload?.mimeType || 'image/png',
+      };
+    },
+
+    /** Retrieves ABHA QR code for Scan & Share OPD counters. */
+    async getAbhaQrCode({ token }) {
+      const { clientId } = getConfig();
+      if (isSandboxSimulator(clientId)) {
+        const svgQr = `
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+  <rect width="100%" height="100%" fill="#ffffff" rx="12"/>
+  <rect x="20" y="20" width="160" height="160" fill="#1B3E2F" rx="8"/>
+  <text x="100" y="95" fill="#4ade80" font-family="sans-serif" font-size="14" font-weight="bold" text-anchor="middle">ABDM SCAN &amp; SHARE</text>
+  <text x="100" y="115" fill="#ffffff" font-family="monospace" font-size="11" text-anchor="middle">91-6166-1670-1721</text>
+  <text x="100" y="135" fill="#A7D7C5" font-family="sans-serif" font-size="9" text-anchor="middle">OPD Counter Fast Check-in</text>
+</svg>`.trim();
+        return {
+          qrBase64: Buffer.from(svgQr).toString('base64'),
+          mimeType: 'image/svg+xml',
+        };
+      }
+      const payload = await abhaRequest('/v3/profile/account/qrCode', {
+        method: 'GET',
+        extraHeaders: { 'X-Token': `Bearer ${token}` },
+      });
+      return {
+        qrBase64: payload?.data || payload?.qrCode || null,
+        mimeType: payload?.mimeType || 'image/png',
       };
     },
   };

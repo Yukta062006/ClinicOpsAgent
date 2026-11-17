@@ -10,10 +10,32 @@ import {
   CalendarIcon,
   InformationCircleIcon,
   CheckCircleIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  ArrowPathIcon,
+  GlobeAltIcon
 } from '@heroicons/react/24/outline'
 import { useData } from '../context/DataContext'
 import { apiAbha, AbhaStatus } from '../utils/api'
+import { validateAadhaar } from '../utils/verhoeff'
+
+const ABDM_CONSENT_TEXTS: Record<'en' | 'hi' | 'mr' | 'bn', { title: string; text: string }> = {
+  en: {
+    title: 'Statutory Aadhaar Consent Declaration (ABDM V3 / UIDAI)',
+    text: 'I hereby declare that I am voluntarily sharing my Aadhaar number and demographic details with the National Health Authority (ABDM) for the purpose of creation of Ayushman Bharat Health Account (ABHA). I understand that my Aadhaar details will be validated through UIDAI authentication.',
+  },
+  hi: {
+    title: 'सांविधिक आधार सहमति घोषणा (ABDM V3 / UIDAI)',
+    text: 'मैं स्वेच्छा से राष्ट्रीय स्वास्थ्य प्राधिकरण (ABDM) के साथ आयुष्मान भारत स्वास्थ्य खाता (ABHA) के निर्माण हेतु अपना आधार नंबर और जनसांख्यिकीय विवरण साझा करने की सहमति देता/देती हूँ। मुझे ज्ञात है कि मेरा आधार UIDAI प्रमाणीकरण के माध्यम से सत्यापित किया जाएगा।',
+  },
+  mr: {
+    title: 'वैधानिक आधार संमती घोषणा (ABDM V3 / UIDAI)',
+    text: 'मी याद्वारे स्वेच्छेने राष्ट्रीय आरोग्य प्राधिकरण (ABDM) सोबत आयुष्मान भारत आरोग्य खाते (ABHA) तयार करण्याच्या उद्देशाने माझा आधार क्रमांक आणि माहिती सामायिक करण्यास सहमती देतो/देते. मला समजते की माझा आधार UIDAI प्रमाणीकरणाद्वारे तपासला जाईल.',
+  },
+  bn: {
+    title: 'বিধিবদ্ধ আধার সম্মতি ঘোষণা (ABDM V3 / UIDAI)',
+    text: 'আমি স্বেচ্ছায় জাতীয় স্বাস্থ্য কর্তৃপক্ষ (ABDM)-এর সাথে আয়ুষ্মান ভারত স্বাস্থ্য অ্যাকাউন্ট (ABHA) তৈরির উদ্দেশ্যে আমার আধার নম্বর এবং জনসংখ্যার বিবরণ ভাগ করে নেওয়ার সম্মতি জানাচ্ছি। আমি বুঝি যে আমার আধার UIDAI প্রমাণীকরণের মাধ্যমে যাচাই করা হবে।',
+  },
+}
 
 export default function Signup() {
   const [name, setName] = useState('')
@@ -48,6 +70,39 @@ export default function Signup() {
   const [abhaInfo, setAbhaInfo] = useState('')
   const [consent, setConsent] = useState(false)
 
+  // Multilingual consent (CRT_ABHA_102 & CRT_ABHA_103)
+  const [consentLang, setConsentLang] = useState<'en' | 'hi' | 'mr' | 'bn'>('en')
+
+  // Aadhaar validation state (CRT_ABHA_104)
+  const [aadhaarError, setAadhaarError] = useState('')
+
+  // OTP resend restrictions (CRT_ABHA_106)
+  const [resendCooldown, setResendCooldown] = useState(0)
+  const [resendCount, setResendCount] = useState(0)
+
+  // Mobile verification (CRT_ABHA_108 & CRT_ABHA_109)
+  const [sameMobile, setSameMobile] = useState<boolean>(true)
+  const [commMobile, setCommMobile] = useState('')
+  const [commMobileOtp, setCommMobileOtp] = useState('')
+  const [commMobileStep, setCommMobileStep] = useState<'input' | 'otp' | 'verified'>('input')
+  const [commMobileBusy, setCommMobileBusy] = useState(false)
+  const [commMobileMsg, setCommMobileMsg] = useState('')
+
+  // ABHA Address suggestions & custom handle check (CRT_ABHA_112)
+  const [suggestedAddresses, setSuggestedAddresses] = useState<string[]>([])
+  const [selectedAddress, setSelectedAddress] = useState('')
+  const [customAddress, setCustomAddress] = useState('')
+  const [isCustomAddress, setIsCustomAddress] = useState(false)
+  const [addressChecking, setAddressChecking] = useState(false)
+  const [addressCheckMsg, setAddressCheckMsg] = useState('')
+
+  // Returning patient identification (CRT_ABHA_116)
+  const [returningPatientInfo, setReturningPatientInfo] = useState<{
+    name: string;
+    maskedEmail?: string;
+    maskedPhone?: string;
+  } | null>(null)
+
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -55,6 +110,14 @@ export default function Signup() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { signUp } = useData()
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [resendCooldown])
 
   const formatAbha = (val: string) => {
     const raw = val.replace(/[^0-9]/g, '').slice(0, 14)
@@ -69,6 +132,21 @@ export default function Signup() {
   // Format ABHA as XX-XXXX-XXXX-XXXX
   const handleAbhaChange = (val: string) => {
     setAbhaNumber(formatAbha(val))
+  }
+
+  const handleAadhaarChange = (val: string) => {
+    const raw = val.replace(/[^0-9]/g, '').slice(0, 12)
+    setAadhaarNumber(raw)
+    if (raw.length === 12) {
+      const result = validateAadhaar(raw, { allowDeveloperDemo: true })
+      if (!result.valid) {
+        setAadhaarError(result.error || 'Invalid Aadhaar number (Verhoeff checksum failed).')
+      } else {
+        setAadhaarError('')
+      }
+    } else {
+      setAadhaarError('')
+    }
   }
 
   useEffect(() => {
@@ -99,6 +177,7 @@ export default function Signup() {
     setAbhaOtp('')
     setMaskedAbha('')
     setAadhaarNumber('')
+    setAadhaarError('')
     setAbhaConsent(false)
     setAbhaError('')
     setAbhaInfo('')
@@ -106,6 +185,19 @@ export default function Signup() {
     setAbhaVerificationToken('')
     setVerifiedAbhaName('')
     setAbhaAddress('')
+    setResendCooldown(0)
+    setResendCount(0)
+    setSameMobile(true)
+    setCommMobile('')
+    setCommMobileOtp('')
+    setCommMobileStep('input')
+    setCommMobileMsg('')
+    setSuggestedAddresses([])
+    setSelectedAddress('')
+    setCustomAddress('')
+    setIsCustomAddress(false)
+    setAddressCheckMsg('')
+    setReturningPatientInfo(null)
   }
 
   const removeAbhaVerification = () => {
@@ -115,21 +207,22 @@ export default function Signup() {
     setAbhaStep('input')
     setAbhaError('')
     setAbhaInfo('')
+    setReturningPatientInfo(null)
   }
 
   const requestAbhaOtp = async () => {
     setAbhaError('')
     setAbhaInfo('')
-
-
+    setReturningPatientInfo(null)
 
     if (abhaAction === 'existing' && abhaNumber.replace(/[^0-9]/g, '').length !== 14) {
       setAbhaError('Enter a 14-digit ABHA number before requesting an OTP.')
       return
     }
     if (abhaAction === 'create') {
-      if (aadhaarNumber.replace(/[^0-9]/g, '').length !== 12) {
-        setAbhaError('Enter your 12-digit Aadhaar number to create an ABHA.')
+      const vResult = validateAadhaar(aadhaarNumber, { allowDeveloperDemo: true })
+      if (!vResult.valid) {
+        setAbhaError(vResult.error || 'Invalid Aadhaar number (Verhoeff checksum failed).')
         return
       }
       if (!abhaConsent) {
@@ -158,7 +251,20 @@ export default function Signup() {
       )
       setAbhaOtp('')
       setAbhaStep('otp')
+      setResendCooldown(60)
+      setResendCount(0)
       setAbhaInfo(response.data.message || 'OTP requested from ABDM.')
+
+      // Load address suggestions if enrolling
+      if (abhaAction === 'create') {
+        apiAbha.getAbhaAddressSuggestions(response.data.challengeId).then((r) => {
+          if (r.success && r.data?.suggestions && r.data.suggestions.length > 0) {
+            setSuggestedAddresses(r.data.suggestions)
+            setSelectedAddress(r.data.suggestions[0])
+          }
+        })
+      }
+
       // Aadhaar is only needed to request the OTP and is not kept in the form.
       if (abhaAction === 'create') setAadhaarNumber('')
     } finally {
@@ -166,31 +272,122 @@ export default function Signup() {
     }
   }
 
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || resendCount >= 3 || !abhaChallengeId) return
+    setAbhaBusy(true)
+    try {
+      const response = await apiAbha.resendOtp(abhaChallengeId)
+      if (response.success && response.data) {
+        setResendCooldown(60)
+        setResendCount(response.data.resendCount)
+        setAbhaInfo(response.data.message || 'A fresh OTP has been dispatched to your mobile.')
+        setAbhaError('')
+      } else {
+        setAbhaError(response.error || 'Failed to resend OTP.')
+      }
+    } finally {
+      setAbhaBusy(false)
+    }
+  }
+
+  const handleRequestCommMobileOtp = async () => {
+    if (commMobile.length !== 10) {
+      setAbhaError('Enter a valid 10-digit communication mobile number.')
+      return
+    }
+    setCommMobileBusy(true)
+    setAbhaError('')
+    try {
+      const res = await apiAbha.requestMobileOtp(abhaChallengeId, commMobile)
+      if (res.success && res.data) {
+        setCommMobileStep('otp')
+        setCommMobileMsg(res.data.message || 'OTP sent to communication mobile.')
+      } else {
+        setAbhaError(res.error || 'Failed to send mobile OTP.')
+      }
+    } finally {
+      setCommMobileBusy(false)
+    }
+  }
+
+  const handleVerifyCommMobileOtp = async () => {
+    if (commMobileOtp.length !== 6) {
+      setAbhaError('Enter the 6-digit OTP sent to your communication mobile.')
+      return
+    }
+    setCommMobileBusy(true)
+    setAbhaError('')
+    try {
+      const res = await apiAbha.verifyMobileOtp(abhaChallengeId, commMobileOtp)
+      if (res.success) {
+        setCommMobileStep('verified')
+        setCommMobileMsg('Communication mobile successfully verified with ABDM.')
+      } else {
+        setAbhaError(res.error || 'Invalid mobile OTP.')
+      }
+    } finally {
+      setCommMobileBusy(false)
+    }
+  }
+
+  const handleCheckAddressAvailability = async () => {
+    if (customAddress.trim().length < 3) {
+      setAddressCheckMsg('Address must be at least 3 characters.')
+      return
+    }
+    setAddressChecking(true)
+    setAddressCheckMsg('')
+    try {
+      const handle = customAddress.includes('@') ? customAddress : `${customAddress}@sbx`
+      const res = await apiAbha.checkAbhaAddressAvailability(handle)
+      if (res.success && res.data) {
+        setAddressCheckMsg(res.data.available ? `✓ ${handle} is available!` : `✗ ${handle} is taken. Try another.`)
+      }
+    } finally {
+      setAddressChecking(false)
+    }
+  }
+
   const verifyAbhaOtp = async () => {
     setAbhaError('')
     setAbhaInfo('')
+    setReturningPatientInfo(null)
 
     if (!/^\d{6}$/.test(abhaOtp.trim())) {
       setAbhaError('Enter the 6-digit OTP sent by ABDM.')
       return
     }
 
+    if (abhaAction === 'create' && !sameMobile && commMobileStep !== 'verified') {
+      setAbhaError('Please verify your communication mobile number before completing ABHA creation.')
+      return
+    }
+
     setAbhaBusy(true)
     try {
+      const finalAddress = isCustomAddress
+        ? (customAddress.trim() ? (customAddress.includes('@') ? customAddress.trim() : `${customAddress.trim()}@sbx`) : undefined)
+        : (selectedAddress || undefined)
+
       const response =
         abhaAction === 'existing'
           ? await apiAbha.verifyExistingAbha(abhaChallengeId, abhaOtp.trim())
-          : await apiAbha.verifyEnrollmentOtp(abhaChallengeId, abhaOtp.trim())
+          : await apiAbha.verifyEnrollmentOtp(abhaChallengeId, abhaOtp.trim(), finalAddress, '1.4', consentLang)
 
       if (!response.success || !response.data) {
-        setAbhaError(response.error || 'ABDM did not confirm this OTP. Please request a new one.')
+        if (response.code === 'ABHA_ALREADY_LINKED' || (response as any).returningPatient) {
+          setReturningPatientInfo((response as any).returningPatient || { name: 'Existing Patient' })
+          setAbhaError(response.error || 'This ABHA number is already linked to a ClinicOps account.')
+        } else {
+          setAbhaError(response.error || 'ABDM did not confirm this OTP. Please request a new one.')
+        }
         return
       }
 
       setAbhaNumber(response.data.abhaNumber)
       setAbhaVerificationToken(response.data.verificationToken)
       setVerifiedAbhaName(response.data.name || '')
-      setAbhaAddress(response.data.abhaAddress || '')
+      setAbhaAddress(response.data.abhaAddress || finalAddress || '')
       setAbhaOtp('')
       setAbhaStep('verified')
       setAbhaInfo(
@@ -267,13 +464,15 @@ export default function Signup() {
         password,
         role: 'patient',
         consent: true,
-        phone: phone.trim(),
+        phone: (sameMobile ? phone.trim() : (commMobile.trim() || phone.trim())),
         date_of_birth: dob || undefined,
         gender,
         address: address.trim() || undefined,
         emergency_contact: emergencyContact.trim() || undefined,
         abha_id: abhaChoice === 'none' ? undefined : (abhaNumber.trim() || undefined),
-        abha_verification_token: abhaChoice === 'none' ? undefined : (abhaVerificationToken || undefined)
+        abha_verification_token: abhaChoice === 'none' ? undefined : (abhaVerificationToken || undefined),
+        consent_version: '1.4',
+        consent_language: consentLang,
       })
 
       if (!result.success || !result.user) {
@@ -652,6 +851,26 @@ export default function Signup() {
                         className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-white font-mono tracking-[0.4em] text-sm text-stone-800 focus:outline-hidden focus:border-forest-green"
                       />
                     </div>
+                    <div className="flex items-center justify-between text-[11px] pt-1">
+                      <span className="text-[#5A6D62]">
+                        {resendCooldown > 0 ? (
+                          `Resend OTP in ${resendCooldown}s`
+                        ) : resendCount >= 3 ? (
+                          <span className="text-amber-800 font-semibold">Resend limit reached (3/3)</span>
+                        ) : (
+                          `Resends left: ${3 - resendCount}`
+                        )}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleResendOtp}
+                        disabled={abhaBusy || resendCooldown > 0 || resendCount >= 3}
+                        className="font-semibold text-forest-green hover:underline disabled:opacity-40 disabled:no-underline cursor-pointer flex items-center gap-1"
+                      >
+                        <ArrowPathIcon className={`w-3.5 h-3.5 ${abhaBusy ? 'animate-spin' : ''}`} />
+                        Resend ABDM OTP
+                      </button>
+                    </div>
                     <div className="flex gap-2 pt-1">
                       <button
                         type="button"
@@ -789,14 +1008,32 @@ export default function Signup() {
                     </button>
                   </div>
                 ) : abhaStep === 'otp' ? (
-                  <div className="space-y-2 p-3 rounded-xl bg-[#F7FAF7] border border-[#E2ECE4]">
+                  <div className="space-y-2.5 p-3 rounded-xl bg-[#F7FAF7] border border-[#E2ECE4]">
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-bold text-forest-green">Enter Aadhaar OTP</p>
                       <span className="text-[10px] text-[#5A6D62]">6 digits</span>
                     </div>
                     <p className="text-[11px] text-stone-700">
-                      Enter the 6-digit Aadhaar OTP sent by ABDM to your registered mobile number.
+                      Enter the 6-digit Aadhaar OTP sent by ABDM to <strong>{maskedAbha}</strong>.
                     </p>
+
+                    {abhaStatus?.environment === 'sandbox' && (
+                      <div className="p-2.5 rounded-lg bg-emerald-100/80 border border-emerald-300 text-emerald-950 text-[11px] leading-relaxed space-y-1">
+                        <p className="font-bold text-emerald-900">📱 Sandbox Mode Active</p>
+                        <p>No physical SMS is sent in sandbox mode. Use test verification code:</p>
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => setAbhaOtp('123456')}
+                            className="font-mono font-bold text-xs bg-white px-2 py-1 rounded-md border border-emerald-400 text-emerald-800 hover:bg-emerald-50 shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+                          >
+                            <span>123456</span>
+                            <span className="text-[10px] font-sans text-emerald-600 font-normal">(click to autofill)</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="relative">
                       <ShieldCheckIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
                       <input
@@ -810,12 +1047,98 @@ export default function Signup() {
                         className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-white font-mono tracking-[0.4em] text-sm text-stone-800 focus:outline-hidden focus:border-forest-green"
                       />
                     </div>
+
+                    <div className="flex items-center justify-between text-[11px] pt-1">
+                      <span className="text-[#5A6D62]">
+                        {resendCooldown > 0 ? (
+                          `Resend OTP in ${resendCooldown}s`
+                        ) : resendCount >= 3 ? (
+                          <span className="text-amber-800 font-semibold">Resend limit reached (3/3)</span>
+                        ) : (
+                          `Resends left: ${3 - resendCount}`
+                        )}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleResendOtp}
+                        disabled={abhaBusy || resendCooldown > 0 || resendCount >= 3}
+                        className="font-semibold text-forest-green hover:underline disabled:opacity-40 disabled:no-underline cursor-pointer flex items-center gap-1"
+                      >
+                        <ArrowPathIcon className={`w-3.5 h-3.5 ${abhaBusy ? 'animate-spin' : ''}`} />
+                        Resend ABDM OTP
+                      </button>
+                    </div>
+
+                    {/* Preferred ABHA Address Selection (CRT_ABHA_112) */}
+                    <div className="space-y-1.5 pt-2 border-t border-[#E2ECE4]">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-stone-800">
+                          Preferred ABHA Address (@abdm)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setIsCustomAddress(!isCustomAddress)}
+                          className="text-[10px] text-forest-green font-semibold hover:underline cursor-pointer"
+                        >
+                          {isCustomAddress ? 'Use suggested handles' : 'Custom handle'}
+                        </button>
+                      </div>
+
+                      {!isCustomAddress ? (
+                        <div className="space-y-1">
+                          <p className="text-[10px] text-[#5A6D62]">Select a recommended ABHA handle:</p>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {(suggestedAddresses.length > 0 ? suggestedAddresses : ['patient.health@sbx', 'patient.care@sbx']).slice(0, 4).map((addr) => (
+                              <button
+                                key={addr}
+                                type="button"
+                                onClick={() => setSelectedAddress(addr)}
+                                className={`py-1.5 px-2 text-[11px] font-mono rounded-lg border text-left truncate cursor-pointer transition-all ${
+                                  selectedAddress === addr
+                                    ? 'bg-emerald-50 border-forest-green text-forest-green font-bold ring-1 ring-forest-green/20'
+                                    : 'bg-white border-stone-200 text-stone-700 hover:border-forest-green'
+                                }`}
+                              >
+                                {selectedAddress === addr ? '✓ ' : ''}{addr}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={customAddress}
+                              onChange={(e) => {
+                                setCustomAddress(e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, ''))
+                                setAddressCheckMsg('')
+                              }}
+                              placeholder="e.g. yukta.health"
+                              className="flex-1 px-3 py-1.5 rounded-lg border border-stone-200 font-mono text-xs text-stone-800 bg-white"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleCheckAddressAvailability}
+                              disabled={addressChecking || customAddress.trim().length < 3}
+                              className="px-3 py-1.5 border border-forest-green text-forest-green rounded-lg text-xs font-bold hover:bg-forest-green hover:text-white disabled:opacity-50 cursor-pointer"
+                            >
+                              {addressChecking ? 'Checking…' : 'Check'}
+                            </button>
+                          </div>
+                          {addressCheckMsg && (
+                            <p className="text-[10px] text-emerald-800 font-semibold">{addressCheckMsg}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     <div className="flex gap-2 pt-1">
                       <button
                         type="button"
                         onClick={verifyAbhaOtp}
                         disabled={abhaBusy || abhaOtp.length !== 6}
-                        className="flex-1 py-2 rounded-xl bg-forest-green text-white text-[11px] font-bold disabled:opacity-50"
+                        className="flex-1 py-2 rounded-xl bg-forest-green text-white text-[11px] font-bold disabled:opacity-50 cursor-pointer"
                       >
                         {abhaBusy ? 'Confirming Enrolment…' : 'Confirm & Create ABHA'}
                       </button>
@@ -827,14 +1150,14 @@ export default function Signup() {
                           setAbhaError('')
                           setAbhaInfo('')
                         }}
-                        className="px-3 py-2 rounded-xl border border-stone-200 text-[11px] font-semibold text-stone-600 hover:bg-stone-50"
+                        className="px-3 py-2 rounded-xl border border-stone-200 text-[11px] font-semibold text-stone-600 hover:bg-stone-50 cursor-pointer"
                       >
                         Back
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-2.5">
+                  <div className="space-y-3">
                     <div>
                       <label className="block text-xs font-semibold text-stone-800 mb-1">
                         12-Digit Aadhaar Number
@@ -847,39 +1170,227 @@ export default function Signup() {
                           autoComplete="off"
                           maxLength={12}
                           value={aadhaarNumber}
-                          onChange={(e) => setAadhaarNumber(e.target.value.replace(/[^0-9]/g, '').slice(0, 12))}
+                          onChange={(e) => handleAadhaarChange(e.target.value)}
                           placeholder="12-digit Aadhaar number"
-                          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-[#FAFAFA] font-mono text-xs text-stone-800 placeholder-stone-400 focus:outline-hidden focus:border-forest-green focus:bg-white"
+                          className={`w-full pl-10 pr-4 py-2.5 rounded-xl border bg-[#FAFAFA] font-mono text-xs text-stone-800 placeholder-stone-400 focus:outline-hidden focus:bg-white ${
+                            aadhaarError ? 'border-rose-400 focus:border-rose-500' : 'border-stone-200 focus:border-forest-green'
+                          }`}
                         />
                       </div>
-                      <p className="text-[10px] text-[#5A6D62] mt-1">
-                        Encrypted and forwarded directly to ABDM to request OTP. Never stored on ClinicOps servers.
-                      </p>
+                      {aadhaarError ? (
+                        <p className="text-[10px] text-rose-600 font-semibold mt-1">
+                          ⚠ {aadhaarError}
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-[#5A6D62] mt-1">
+                          Encrypted and forwarded directly to ABDM to request OTP. Never stored on ClinicOps servers.
+                        </p>
+                      )}
                     </div>
 
-                    <label className="flex items-start gap-2 p-2.5 rounded-xl bg-[#F7FAF7] border border-[#E2ECE4] cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={abhaConsent}
-                        onChange={(e) => setAbhaConsent(e.target.checked)}
-                        className="mt-0.5 w-3.5 h-3.5 rounded text-forest-green border-gray-300"
-                      />
-                      <span className="text-[10px] text-stone-700 leading-relaxed">
-                        I hereby declare voluntary consent to share my Aadhaar number with the National Health Authority (ABDM) for generating my Ayushman Bharat Health Account (ABHA).
-                      </span>
-                    </label>
+                    {/* Multilingual Consent Selector (CRT_ABHA_102 & CRT_ABHA_103) */}
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-bold text-stone-800 flex items-center gap-1">
+                          <GlobeAltIcon className="w-3.5 h-3.5 text-forest-green" />
+                          <span>Statutory Consent Language</span>
+                        </label>
+                        <span className="text-[10px] text-[#5A6D62] font-mono">v1.4 (Statutory)</span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-1">
+                        {[
+                          { id: 'en', label: 'English' },
+                          { id: 'hi', label: 'हिन्दी' },
+                          { id: 'mr', label: 'मराठी' },
+                          { id: 'bn', label: 'বাংলা' },
+                        ].map((lang) => (
+                          <button
+                            key={lang.id}
+                            type="button"
+                            onClick={() => setConsentLang(lang.id as any)}
+                            className={`py-1 text-[11px] font-bold rounded-lg border transition-all text-center cursor-pointer ${
+                              consentLang === lang.id
+                                ? 'bg-forest-green text-white border-forest-green shadow-xs'
+                                : 'bg-white text-stone-700 border-stone-200 hover:border-forest-green'
+                            }`}
+                          >
+                            {lang.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="p-2.5 rounded-xl bg-[#F7FAF7] border border-[#E2ECE4] text-[11px] text-stone-700 leading-relaxed space-y-1.5">
+                        <p className="font-bold text-forest-green text-[10px] uppercase tracking-wider">
+                          {ABDM_CONSENT_TEXTS[consentLang].title}
+                        </p>
+                        <p className="text-stone-800 text-[11px] italic">
+                          &ldquo;{ABDM_CONSENT_TEXTS[consentLang].text}&rdquo;
+                        </p>
+                        <label className="flex items-start gap-2 pt-1.5 border-t border-[#E2ECE4] cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={abhaConsent}
+                            onChange={(e) => setAbhaConsent(e.target.checked)}
+                            className="mt-0.5 w-3.5 h-3.5 rounded text-forest-green border-gray-300"
+                          />
+                          <span className="text-[11px] font-semibold text-stone-900 leading-normal">
+                            I voluntary provide my Aadhaar consent in {consentLang === 'en' ? 'English' : consentLang === 'hi' ? 'Hindi' : consentLang === 'mr' ? 'Marathi' : 'Bengali'} under ABDM v1.4.
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Communication Mobile Verification (CRT_ABHA_108 & CRT_ABHA_109) */}
+                    <div className="space-y-1.5 pt-1">
+                      <label className="block text-xs font-semibold text-stone-800">
+                        Communication Mobile Number
+                      </label>
+                      <div className="space-y-1 text-xs text-stone-700">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="commMobileRadio"
+                            checked={sameMobile}
+                            onChange={() => {
+                              setSameMobile(true)
+                              setCommMobileStep('input')
+                            }}
+                            className="text-forest-green"
+                          />
+                          <span>Use my Aadhaar-linked mobile number</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="commMobileRadio"
+                            checked={!sameMobile}
+                            onChange={() => setSameMobile(false)}
+                            className="text-forest-green"
+                          />
+                          <span>Use a different communication mobile</span>
+                        </label>
+                      </div>
+
+                      {!sameMobile && (
+                        <div className="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200 space-y-2 mt-1">
+                          <p className="text-[10px] text-amber-900">
+                            Per ABDM CRT_ABHA_108/109, an alternate communication mobile requires mobile OTP verification.
+                          </p>
+                          {commMobileStep === 'verified' ? (
+                            <div className="flex items-center gap-1.5 text-emerald-800 text-xs font-bold bg-white p-2 rounded-lg border border-emerald-300">
+                              <CheckCircleIcon className="w-4 h-4 text-emerald-600" />
+                              <span>Alternate Mobile ({commMobile}) Verified with ABDM</span>
+                            </div>
+                          ) : commMobileStep === 'otp' ? (
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="font-semibold text-stone-700">6-digit Mobile OTP:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setCommMobileOtp('123456')}
+                                  className="text-[10px] text-forest-green font-bold bg-white px-2 py-0.5 rounded border border-emerald-300 hover:bg-emerald-50 cursor-pointer"
+                                >
+                                  Autofill test OTP (123456)
+                                </button>
+                              </div>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  maxLength={6}
+                                  value={commMobileOtp}
+                                  onChange={(e) => setCommMobileOtp(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                                  placeholder="Enter 123456"
+                                  className="w-full px-3 py-1.5 rounded-lg border border-amber-300 bg-white font-mono text-xs tracking-wider"
+                                />
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={handleVerifyCommMobileOtp}
+                                  disabled={commMobileBusy || commMobileOtp.length !== 6}
+                                  className="px-3 py-1.5 bg-forest-green text-white rounded-lg text-xs font-bold disabled:opacity-50 cursor-pointer"
+                                >
+                                  {commMobileBusy ? 'Verifying…' : 'Verify Mobile OTP'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setCommMobileStep('input')}
+                                  className="px-2 py-1.5 border border-stone-300 text-xs rounded-lg cursor-pointer"
+                                >
+                                  Change
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex gap-2">
+                              <input
+                                type="tel"
+                                maxLength={10}
+                                value={commMobile}
+                                onChange={(e) => setCommMobile(e.target.value.replace(/[^0-9]/g, '').slice(0, 10))}
+                                placeholder="10-digit mobile number"
+                                className="flex-1 px-3 py-1.5 rounded-lg border border-amber-300 bg-white text-xs font-mono"
+                              />
+                              <button
+                                type="button"
+                                onClick={handleRequestCommMobileOtp}
+                                disabled={commMobileBusy || commMobile.length !== 10}
+                                className="px-3 py-1.5 bg-forest-green text-white rounded-lg text-xs font-bold disabled:opacity-50 cursor-pointer"
+                              >
+                                {commMobileBusy ? 'Sending…' : 'Send Mobile OTP'}
+                              </button>
+                            </div>
+                          )}
+                          {commMobileMsg && (
+                            <p className="text-[10px] text-emerald-800 font-semibold">{commMobileMsg}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
 
                     <button
                       type="button"
                       onClick={requestAbhaOtp}
-                      disabled={abhaBusy || aadhaarNumber.length !== 12 || !abhaConsent}
-                      className="w-full py-2.5 rounded-xl bg-forest-green text-white text-[11px] font-bold hover:bg-forest-green/90 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      disabled={abhaBusy || aadhaarNumber.length !== 12 || !!aadhaarError || !abhaConsent || (!sameMobile && commMobileStep !== 'verified')}
+                      className="w-full py-2.5 rounded-xl bg-forest-green text-white text-[11px] font-bold hover:bg-forest-green/90 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
                     >
                       <ShieldCheckIcon className="w-3.5 h-3.5" />
                       {abhaBusy ? 'Requesting Aadhaar OTP…' : 'Send ABDM Aadhaar OTP'}
                     </button>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Returning Patient Banner (CRT_ABHA_116) */}
+            {returningPatientInfo && (
+              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs space-y-2">
+                <div className="flex items-start gap-2">
+                  <InformationCircleIcon className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-amber-900">Existing Patient Account Found</p>
+                    <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                      This ABHA identity is already associated with <strong>{returningPatientInfo.name}</strong>.
+                      To protect medical history and prevent duplicate patient records, sign in to your existing account.
+                    </p>
+                  </div>
+                </div>
+                <div className="pt-1 flex gap-2">
+                  <Link
+                    to={`/login?abha=${abhaNumber.replace(/[^0-9]/g, '')}`}
+                    className="px-3 py-1.5 bg-forest-green text-white text-[11px] font-bold rounded-lg hover:bg-forest-green/90 inline-flex items-center gap-1"
+                  >
+                    Sign In with ABHA
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setReturningPatientInfo(null)}
+                    className="px-3 py-1.5 border border-amber-300 text-[11px] font-semibold rounded-lg hover:bg-amber-100/60 cursor-pointer"
+                  >
+                    Dismiss
+                  </button>
+                </div>
               </div>
             )}
 

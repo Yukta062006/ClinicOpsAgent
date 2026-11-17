@@ -9,6 +9,7 @@ import Database from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
 import { fileURLToPath } from 'url';
 import { createAbdmClient, AbdmError } from './server-abdm.mjs';
+import { validateAadhaar } from './verhoeff.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -485,6 +486,10 @@ function initDatabase() {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_abha_challenge_expiry ON abha_otp_challenges(expires_at)`);
+  try { db.exec(`ALTER TABLE patients ADD COLUMN consent_version TEXT DEFAULT '1.4'`); } catch { }
+  try { db.exec(`ALTER TABLE patients ADD COLUMN consent_language TEXT DEFAULT 'en'`); } catch { }
+  try { db.exec(`ALTER TABLE abha_otp_challenges ADD COLUMN resend_count INTEGER DEFAULT 0`); } catch { }
+  try { db.exec(`ALTER TABLE abha_otp_challenges ADD COLUMN last_resend_at INTEGER`); } catch { }
 
   // Audit trail for clinically significant actions
   db.exec(`
@@ -1061,8 +1066,8 @@ app.post('/api/auth/register', rateLimit({ label: 'register', windowMs: 15 * 60 
         INSERT INTO patients (
           id, user_id, date_of_birth, gender, address, emergency_contact,
           blood_type, abha_id, aadhaar, pan, insurance_provider, consent_recorded_at,
-          abha_verified, abha_verified_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
+          abha_verified, abha_verified_at, consent_version, consent_language
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?)
       `).run(
         patientId,
         userId,
@@ -1076,7 +1081,9 @@ app.post('/api/auth/register', rateLimit({ label: 'register', windowMs: 15 * 60 
         encryptPii(pan),
         abhaId ? 'Ayushman Bharat / ABHA' : null,
         abhaVerifiedAt ? 1 : 0,
-        abhaVerifiedAt
+        abhaVerifiedAt,
+        body.consent_version || '1.4',
+        body.consent_language || 'en'
       );
 
       db.prepare(`INSERT INTO user_points (id, user_id, total_points, streak_days) VALUES (?, ?, 0, 0)`)
@@ -1174,13 +1181,11 @@ function requireAbhaNumber(value) {
 
 function requireAadhaarDigits(value) {
   const digitsOnly = abhaDigits(value);
-  if (digitsOnly.length !== 12) {
-    throw new ApiError(400, 'Aadhaar number must be exactly 12 digits.');
+  const vResult = validateAadhaar(digitsOnly, { allowDeveloperDemo: !isProduction });
+  if (!vResult.valid) {
+    throw new ApiError(400, vResult.error || 'Aadhaar number is invalid per UIDAI specifications.');
   }
-  if (digitsOnly.startsWith('0') || digitsOnly.startsWith('1')) {
-    throw new ApiError(400, 'That does not look like a valid Aadhaar number.');
-  }
-  return digitsOnly;
+  return vResult.clean;
 }
 
 function requireOtp(value) {
@@ -1259,6 +1264,173 @@ function findPatientByUserId(userId) {
 app.get('/api/abha/status', (req, res) => {
   res.json({ success: true, data: abdm.describe() });
 });
+
+app.post(
+  '/api/abha/resend-otp',
+  rateLimit({ label: 'abha-resend-otp', windowMs: 15 * 60 * 1000, max: 10 }),
+  async (req, res) => {
+    try {
+      const challengeId = requireString(req.body?.challenge_id, 'Challenge ID', { max: 80 });
+      const challenge = db.prepare('SELECT * FROM abha_otp_challenges WHERE id = ?').get(challengeId);
+      if (!challenge) {
+        throw new ApiError(400, 'This verification session is invalid. Please start over.');
+      }
+      if (challenge.consumed_at) {
+        throw new ApiError(409, 'This verification has already been completed.');
+      }
+
+      // Enforce ABDM test case CRT_ABHA_106: max 3 resends
+      const currentResends = Number(challenge.resend_count || 0);
+      if (currentResends >= 3) {
+        throw new ApiError(429, 'Maximum OTP resend attempts (3) reached. Please wait or initiate a new request.');
+      }
+
+      // Enforce ABDM test case CRT_ABHA_106: 60-second cooldown
+      const lastAttempt = challenge.last_resend_at ? Number(challenge.last_resend_at) : Number(challenge.created_at);
+      const elapsed = Date.now() - lastAttempt;
+      if (elapsed < 60_000) {
+        const remaining = Math.ceil((60_000 - elapsed) / 1000);
+        throw new ApiError(429, `Please wait ${remaining} second${remaining > 1 ? 's' : ''} before requesting another OTP.`);
+      }
+
+      const { message } = await abdm.resendOtp({
+        txnId: challenge.txn_id,
+        purpose: challenge.purpose,
+      });
+
+      const now = Date.now();
+      const newResendCount = currentResends + 1;
+      db.prepare(`
+        UPDATE abha_otp_challenges
+        SET resend_count = ?, last_resend_at = ?, expires_at = ?
+        WHERE id = ?
+      `).run(newResendCount, now, now + ABHA_CHALLENGE_TTL_MS, challenge.id);
+
+      logAudit(req, 'abha.otp_resent', {
+        detail: `challenge=${challengeId} resendCount=${newResendCount}`,
+      });
+
+      res.json({
+        success: true,
+        data: {
+          resendCount: newResendCount,
+          maxResends: 3,
+          cooldownSeconds: 60,
+          expiresInSeconds: Math.floor(ABHA_CHALLENGE_TTL_MS / 1000),
+          message: message || 'A fresh OTP has been sent.',
+        },
+      });
+    } catch (error) {
+      sendAbhaError(res, error, 'abha/resend-otp');
+    }
+  }
+);
+
+app.get(
+  '/api/abha/address/suggestions',
+  rateLimit({ label: 'abha-address-suggestions', windowMs: 15 * 60 * 1000, max: 20 }),
+  async (req, res) => {
+    try {
+      const challengeId = req.query?.challenge_id;
+      let txnId = req.query?.txn_id;
+      if (challengeId) {
+        const row = db.prepare('SELECT txn_id FROM abha_otp_challenges WHERE id = ?').get(challengeId);
+        if (row) txnId = row.txn_id;
+      }
+      if (!txnId) {
+        txnId = 'sbx-general';
+      }
+      const data = await abdm.getAbhaAddressSuggestions({ txnId });
+      res.json({ success: true, data });
+    } catch (error) {
+      sendAbhaError(res, error, 'abha/address/suggestions');
+    }
+  }
+);
+
+app.post(
+  '/api/abha/address/check',
+  rateLimit({ label: 'abha-address-check', windowMs: 15 * 60 * 1000, max: 30 }),
+  async (req, res) => {
+    try {
+      const abhaAddress = requireString(req.body?.abha_address, 'ABHA address', { min: 3, max: 64 });
+      const data = await abdm.checkAbhaAddressAvailability({ abhaAddress });
+      res.json({ success: true, data });
+    } catch (error) {
+      sendAbhaError(res, error, 'abha/address/check');
+    }
+  }
+);
+
+app.post(
+  '/api/abha/enroll/mobile-otp',
+  rateLimit({ label: 'abha-mobile-otp', windowMs: 15 * 60 * 1000, max: 10 }),
+  async (req, res) => {
+    try {
+      const challengeId = requireString(req.body?.challenge_id, 'Challenge ID', { max: 80 });
+      const mobileNumber = requireString(req.body?.mobile_number, 'Mobile number', { min: 10, max: 15 });
+      const challenge = loadAbhaChallenge(challengeId, 'enroll');
+
+      const data = await abdm.requestMobileOtp({ txnId: challenge.txn_id, mobileNumber });
+      res.json({ success: true, data });
+    } catch (error) {
+      sendAbhaError(res, error, 'abha/enroll/mobile-otp');
+    }
+  }
+);
+
+app.post(
+  '/api/abha/enroll/verify-mobile-otp',
+  rateLimit({ label: 'abha-verify-mobile-otp', windowMs: 15 * 60 * 1000, max: 10 }),
+  async (req, res) => {
+    try {
+      const challengeId = requireString(req.body?.challenge_id, 'Challenge ID', { max: 80 });
+      const otp = requireOtp(req.body?.otp);
+      const challenge = loadAbhaChallenge(challengeId, 'enroll');
+
+      const data = await abdm.verifyMobileOtp({ txnId: challenge.txn_id, otp });
+      res.json({ success: true, data });
+    } catch (error) {
+      sendAbhaError(res, error, 'abha/enroll/verify-mobile-otp');
+    }
+  }
+);
+
+app.get(
+  '/api/abha/profile/card',
+  authenticateToken,
+  requireRole(['patient']),
+  async (req, res) => {
+    try {
+      const patient = findPatientByUserId(req.user.id);
+      if (!patient || !patient.abha_id) {
+        throw new ApiError(404, 'No ABHA number is linked to this account.');
+      }
+      const data = await abdm.getAbhaCard({ token: req.token || 'user-session' });
+      res.json({ success: true, data });
+    } catch (error) {
+      sendAbhaError(res, error, 'abha/profile/card');
+    }
+  }
+);
+
+app.get(
+  '/api/abha/profile/qr',
+  authenticateToken,
+  requireRole(['patient']),
+  async (req, res) => {
+    try {
+      const patient = findPatientByUserId(req.user.id);
+      if (!patient || !patient.abha_id) {
+        throw new ApiError(404, 'No ABHA number is linked to this account.');
+      }
+      const data = await abdm.getAbhaQrCode({ token: req.token || 'user-session' });
+      res.json({ success: true, data });
+    } catch (error) {
+      sendAbhaError(res, error, 'abha/profile/qr');
+    }
+  }
+);
 
 app.post(
   '/api/abha/login/request-otp',
@@ -1470,7 +1642,12 @@ app.post(
 
       let verified;
       try {
-        verified = await abdm.verifyEnrollment({ txnId: challenge.txn_id, otp });
+        verified = await abdm.verifyEnrollment({
+          txnId: challenge.txn_id,
+          otp,
+          preferredAbhaAddress: req.body?.preferred_abha_address || null,
+          consentVersion: req.body?.consent_version || '1.4',
+        });
       } catch (error) {
         if (error instanceof AbdmError) recordAbhaAttempt(req, challenge, error);
         throw error;
@@ -1483,10 +1660,22 @@ app.post(
       }
 
       const abhaNumber = verified.profile.abhaNumber;
-      if (db.prepare('SELECT id FROM patients WHERE abha_id = ?').get(abhaNumber)) {
+      const existingPatient = db.prepare(`
+        SELECT p.*, u.name, u.email, u.phone
+        FROM patients p
+        JOIN users u ON u.id = p.user_id
+        WHERE p.abha_id = ?
+      `).get(abhaNumber);
+
+      if (existingPatient) {
         return res.status(409).json({
-          error: 'This ABHA number is already linked to a ClinicOps account. Sign in with ABHA instead.',
+          error: `This ABHA number is already linked to an existing ClinicOps account (${existingPatient.name}). Please sign in with ABHA instead of creating a duplicate account.`,
           code: 'ABHA_ALREADY_LINKED',
+          returningPatient: {
+            name: existingPatient.name,
+            maskedEmail: existingPatient.email ? existingPatient.email.replace(/(.{2})(.*)(?=@)/, (_, a, b) => a + '*'.repeat(b.length)) : null,
+            maskedPhone: existingPatient.phone ? '******' + existingPatient.phone.slice(-4) : null,
+          },
         });
       }
 
@@ -1500,6 +1689,8 @@ app.post(
           abhaNumber,
           abhaAddress: verified.profile.abhaAddress,
           name: verified.profile.name,
+          gender: verified.profile.gender || null,
+          dateOfBirth: verified.profile.dateOfBirth || null,
           isNew: verified.isNew,
           verificationToken: signAbhaProof(verified.profile),
           expiresInSeconds: 10 * 60,
